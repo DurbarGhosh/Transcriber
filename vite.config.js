@@ -70,6 +70,7 @@ export default defineConfig({
         offscreen: resolve(root, 'offscreen.html'),
         spike: resolve(root, 'spike.html'),
         history: resolve(root, 'history.html'),
+        detail: resolve(root, 'detail.html'),
         transcription: resolve(root, 'transcription.html'),
         background: resolve(root, 'src/background/background.js'),
       },

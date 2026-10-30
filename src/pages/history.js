@@ -1,14 +1,24 @@
 import {
+  deleteTranscript,
   discardRecording,
   getRecordingChunks,
   getRecordingParts,
   listRecordings,
+  listTranscriptionJobs,
+  listTranscripts,
   recoverRecording,
 } from '../storage/database.js';
 
 const container = document.querySelector('#recordings');
 const status = document.querySelector('#status');
+const searchForm = document.querySelector('#search-form');
+const searchInput = document.querySelector('#search');
+const searchResults = document.querySelector('#search-results');
+const searchResultList = document.querySelector('#search-result-list');
 const objectUrls = [];
+let recordingsById = new Map();
+let transcripts = [];
+let jobsById = new Map();
 
 function formatDuration(duration) {
   const seconds = Math.max(0, Math.round(duration));
@@ -16,13 +26,25 @@ function formatDuration(duration) {
   return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
+function displayStatus(recordingId) {
+  const job = jobsById.get(recordingId);
+  if (transcripts.some((item) => item.recordingId === recordingId) && job?.status === 'complete') return 'done';
+  if (['queued', 'running'].includes(job?.status)) return 'transcribing';
+  return 'recorded';
+}
+
+function recordingDetails(recording) {
+  return `${new Date(recording.date).toLocaleString()} — ${formatDuration(recording.duration)} — ${recording.mode} — ${displayStatus(recording.id)}`;
+}
+
 async function renderRecording(recording) {
   const article = document.createElement('article');
   const heading = document.createElement('h2');
   heading.textContent = recording.title;
   const details = document.createElement('p');
-  details.textContent = `${new Date(recording.date).toLocaleString()} — ${formatDuration(recording.duration)} — ${recording.mode}`;
+  details.textContent = recordingDetails(recording);
   article.append(heading, details);
+
   if (recording.status === 'complete') {
     const transcribeButton = document.createElement('button');
     transcribeButton.type = 'button';
@@ -31,6 +53,14 @@ async function renderRecording(recording) {
       location.href = `transcription.html?recordingId=${encodeURIComponent(recording.id)}`;
     });
     article.append(transcribeButton);
+  }
+
+  const transcript = transcripts.find((item) => item.recordingId === recording.id);
+  if (transcript) {
+    const openTranscript = document.createElement('a');
+    openTranscript.href = `detail.html?recordingId=${encodeURIComponent(recording.id)}`;
+    openTranscript.textContent = 'Open transcript';
+    article.append(' ', openTranscript);
   }
 
   const parts = await getRecordingParts(recording.id);
@@ -67,6 +97,9 @@ async function renderRecording(recording) {
     const recoverButton = document.createElement('button');
     recoverButton.type = 'button';
     recoverButton.textContent = 'Recover';
+    const discardButton = document.createElement('button');
+    discardButton.type = 'button';
+    discardButton.textContent = 'Discard';
     recoverButton.addEventListener('click', async () => {
       recoverButton.disabled = true;
       try {
@@ -79,16 +112,12 @@ async function renderRecording(recording) {
         recoverButton.disabled = false;
       }
     });
-    const discardButton = document.createElement('button');
-    discardButton.type = 'button';
-    discardButton.textContent = 'Discard';
     discardButton.addEventListener('click', async () => {
       discardButton.disabled = true;
       try {
         await discardRecording(recording.id);
-        const playerUrl = article.querySelector('audio, video')?.src;
-        if (playerUrl) URL.revokeObjectURL(playerUrl);
         article.remove();
+        recordingsById.delete(recording.id);
       } catch (error) {
         interruptedMessage.textContent = `Could not discard the recording: ${error.message}`;
         discardButton.disabled = false;
@@ -96,7 +125,72 @@ async function renderRecording(recording) {
     });
     article.append(interruptedMessage, recoverButton, discardButton);
   }
+
+  const actions = document.createElement('p');
+  const deleteRecordingButton = document.createElement('button');
+  deleteRecordingButton.type = 'button';
+  deleteRecordingButton.textContent = 'Delete recording';
+  deleteRecordingButton.addEventListener('click', async () => {
+    deleteRecordingButton.disabled = true;
+    try {
+      await discardRecording(recording.id);
+      article.remove();
+      recordingsById.delete(recording.id);
+    } catch (error) {
+      status.textContent = `Could not delete the recording: ${error.message}`;
+      deleteRecordingButton.disabled = false;
+    }
+  });
+  actions.append(deleteRecordingButton);
+
+  if (transcript) {
+    const deleteTranscriptButton = document.createElement('button');
+    deleteTranscriptButton.type = 'button';
+    deleteTranscriptButton.textContent = 'Delete transcript';
+    deleteTranscriptButton.addEventListener('click', async () => {
+      deleteTranscriptButton.disabled = true;
+      try {
+        await deleteTranscript(recording.id);
+        transcripts = transcripts.filter((item) => item.recordingId !== recording.id);
+        jobsById.delete(recording.id);
+        deleteTranscriptButton.remove();
+        article.querySelector('a[href^="detail.html"]')?.remove();
+        details.textContent = recordingDetails(recording);
+      } catch (error) {
+        status.textContent = `Could not delete the transcript: ${error.message}`;
+        deleteTranscriptButton.disabled = false;
+      }
+    });
+    actions.append(' ', deleteTranscriptButton);
+  }
+  article.append(actions);
   container.append(article);
+}
+
+function runSearch() {
+  const query = searchInput.value.trim().toLocaleLowerCase();
+  searchResults.hidden = false;
+  searchResultList.replaceChildren();
+  if (!query) {
+    searchResultList.textContent = 'Enter a word or phrase to search.';
+    return;
+  }
+  const matches = transcripts.filter(({ words }) => (
+    words.map(({ word }) => word).join(' ').toLocaleLowerCase().includes(query)
+  ));
+  if (!matches.length) {
+    searchResultList.textContent = 'No matching transcripts found.';
+    return;
+  }
+  for (const transcript of matches) {
+    const recording = recordingsById.get(transcript.recordingId);
+    const result = document.createElement('p');
+    const link = document.createElement('a');
+    link.href = `detail.html?recordingId=${encodeURIComponent(transcript.recordingId)}`;
+    link.textContent = recording?.title || 'Transcript for a deleted recording';
+    result.append(link);
+    searchResultList.append(result);
+  }
 }
 
 async function loadHistory() {
@@ -108,7 +202,14 @@ async function loadHistory() {
     await chrome.storage.local.set({ rolloverMinutes: 30 });
     status.textContent = 'Rollover setting reset to 30 minutes.';
   }
-  const recordings = await listRecordings();
+  const [recordings, storedTranscripts, jobs] = await Promise.all([
+    listRecordings(),
+    listTranscripts(),
+    listTranscriptionJobs(),
+  ]);
+  recordingsById = new Map(recordings.map((recording) => [recording.id, recording]));
+  transcripts = storedTranscripts;
+  jobsById = new Map(jobs.map((job) => [job.recordingId, job]));
   if (recordings.length === 0 && !status.textContent.includes('setting')) {
     status.textContent = 'No recordings yet.';
   } else if (!status.textContent.includes('setting')) {
@@ -118,6 +219,10 @@ async function loadHistory() {
 }
 
 window.addEventListener('pagehide', () => objectUrls.forEach((url) => URL.revokeObjectURL(url)));
+searchForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  runSearch();
+});
 loadHistory().catch((error) => {
   status.textContent = `Could not load recording history: ${error.message}`;
 });

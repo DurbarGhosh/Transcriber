@@ -74,6 +74,16 @@ export async function getRecording(id) {
   return database.get('recordings', id);
 }
 
+export async function getTranscript(recordingId) {
+  const database = await databasePromise;
+  return database.get('transcripts', recordingId);
+}
+
+export async function listTranscripts() {
+  const database = await databasePromise;
+  return database.getAll('transcripts');
+}
+
 export async function getRecordingChunks(recordingId) {
   const database = await databasePromise;
   return database.getAllFromIndex('chunks', 'recordingId', recordingId);
@@ -118,6 +128,14 @@ export async function discardRecording(id) {
       cursor = await cursor.continue();
     }
   }
+  await transaction.done;
+}
+
+export async function deleteTranscript(recordingId) {
+  const database = await databasePromise;
+  const transaction = database.transaction(['transcripts', 'jobs'], 'readwrite');
+  await transaction.objectStore('transcripts').delete(recordingId);
+  await transaction.objectStore('jobs').delete(recordingId);
   await transaction.done;
 }
 
