@@ -45,7 +45,8 @@ self.addEventListener('message', async (event) => {
         word: chunk.text.trim(),
         start: chunk.timestamp[0],
         end: chunk.timestamp[1],
-      }));
+      }))
+      .filter(({ word }) => word.length > 0);
     self.postMessage({
       type: 'DONE',
       device: selectedDevice,
