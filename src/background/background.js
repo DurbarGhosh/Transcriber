@@ -48,6 +48,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         type: 'START_RECORDING',
         streamId,
         tab: message.tab,
+        mode: message.mode,
         rolloverMinutes,
       });
       if (result.ok) await chrome.action.setBadgeText({ text: 'REC' });

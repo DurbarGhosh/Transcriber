@@ -21,7 +21,7 @@ async function renderRecording(recording) {
   const heading = document.createElement('h2');
   heading.textContent = recording.title;
   const details = document.createElement('p');
-  details.textContent = `${new Date(recording.date).toLocaleString()} — ${formatDuration(recording.duration)}`;
+  details.textContent = `${new Date(recording.date).toLocaleString()} — ${formatDuration(recording.duration)} — ${recording.mode}`;
   article.append(heading, details);
 
   const parts = await getRecordingParts(recording.id);
@@ -35,10 +35,14 @@ async function renderRecording(recording) {
   const chunks = await getRecordingChunks(recording.id);
   chunks.sort((left, right) => left.part - right.part || left.index - right.index);
   if (chunks.length > 0) {
-    const mimeType = chunks[0].blob.type || 'audio/webm';
+    const totalBytes = chunks.reduce((sum, { blob }) => sum + blob.size, 0);
+    const size = document.createElement('p');
+    size.textContent = `Size: ${(totalBytes / (1024 * 1024)).toFixed(1)} MB`;
+    article.append(size);
+    const mimeType = chunks[0].blob.type || (recording.mode === 'video' ? 'video/webm' : 'audio/webm');
     const url = URL.createObjectURL(new Blob(chunks.map(({ blob }) => blob), { type: mimeType }));
     objectUrls.push(url);
-    const player = document.createElement('audio');
+    const player = document.createElement(recording.mode === 'video' ? 'video' : 'audio');
     player.controls = true;
     player.src = url;
     article.append(player);
@@ -73,7 +77,7 @@ async function renderRecording(recording) {
       discardButton.disabled = true;
       try {
         await discardRecording(recording.id);
-        const playerUrl = article.querySelector('audio')?.src;
+        const playerUrl = article.querySelector('audio, video')?.src;
         if (playerUrl) URL.revokeObjectURL(playerUrl);
         article.remove();
       } catch (error) {

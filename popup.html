@@ -7,6 +7,11 @@
   </head>
   <body>
     <h1>Tab Recorder</h1>
+    <fieldset>
+      <legend>Recording mode</legend>
+      <label><input name="mode" type="radio" value="audio" checked> Audio only</label>
+      <label><input name="mode" type="radio" value="video"> Video + audio</label>
+    </fieldset>
     <button id="start" type="button">Start recording this tab</button>
     <button id="stop" type="button" disabled>Stop recording</button>
     <p>Time: <span id="timer">00:00</span></p>

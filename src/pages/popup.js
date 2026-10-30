@@ -2,11 +2,13 @@ const status = document.querySelector('#status');
 const startButton = document.querySelector('#start');
 const stopButton = document.querySelector('#stop');
 const timer = document.querySelector('#timer');
+const modeInputs = [...document.querySelectorAll('input[name="mode"]')];
 let timerInterval;
 
 function showRecordingState(recording, startedAt, orphanedCapture = false) {
   startButton.disabled = recording || orphanedCapture;
   stopButton.disabled = !recording;
+  modeInputs.forEach((input) => { input.disabled = recording || orphanedCapture; });
   clearInterval(timerInterval);
   if (!recording) {
     timer.textContent = '00:00';
@@ -51,6 +53,7 @@ startButton.addEventListener('click', async (event) => {
       type: 'START_RECORDING',
       tabId: tab.id,
       tab: { id: tab.id, title: tab.title, url: tab.url },
+      mode: document.querySelector('input[name="mode"]:checked').value,
     });
     status.textContent = result.ok
       ? result.alreadyRecording
