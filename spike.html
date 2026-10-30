@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phase 0 transcription test</title>
+  </head>
+  <body>
+    <h1>Phase 0 transcription test</h1>
+    <button id="download" type="button">Download last recording</button>
+    <p id="download-status"></p>
+    <hr>
+    <label for="audio-file">Choose an audio recording</label>
+    <input id="audio-file" type="file" accept="audio/*,video/webm">
+    <label for="backend">Transcription engine</label>
+    <select id="backend">
+      <option value="auto">WebGPU, with WASM fallback</option>
+      <option value="wasm">WASM test</option>
+    </select>
+    <button id="transcribe" type="button">Transcribe selected file</button>
+    <p>The model downloads once. Later runs load it from Chrome's local cache unless that cache is cleared or the extension is removed.</p>
+    <p id="device"></p>
+    <p id="progress">Choose a file to begin.</p>
+    <pre id="words"></pre>
+    <script type="module" src="/src/pages/spike.js"></script>
+  </body>
+</html>
