@@ -24,6 +24,26 @@ function bundledWasmRuntime() {
   };
 }
 
+function bundledVadRuntime() {
+  return {
+    name: 'bundled-vad-runtime',
+    async generateBundle() {
+      const assets = [
+        ['node_modules/@ricky0123/vad-web/dist/silero_vad_legacy.onnx', 'vad/silero_vad_legacy.onnx'],
+        ['node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.mjs', 'vad/ort-wasm-simd-threaded.mjs'],
+        ['node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.wasm', 'vad/ort-wasm-simd-threaded.wasm'],
+      ];
+      for (const [sourcePath, fileName] of assets) {
+        this.emitFile({
+          type: 'asset',
+          fileName,
+          source: await readFile(resolve(root, sourcePath)),
+        });
+      }
+    },
+  };
+}
+
 function versionStamp() {
   return {
     name: 'version-stamp',
@@ -40,7 +60,7 @@ function versionStamp() {
 }
 
 export default defineConfig({
-  plugins: [bundledWasmRuntime(), versionStamp()],
+  plugins: [bundledWasmRuntime(), bundledVadRuntime(), versionStamp()],
   build: {
     outDir: 'dist',
     emptyOutDir: true,
@@ -50,6 +70,7 @@ export default defineConfig({
         offscreen: resolve(root, 'offscreen.html'),
         spike: resolve(root, 'spike.html'),
         history: resolve(root, 'history.html'),
+        transcription: resolve(root, 'transcription.html'),
         background: resolve(root, 'src/background/background.js'),
       },
       output: {

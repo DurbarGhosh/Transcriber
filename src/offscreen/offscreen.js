@@ -6,7 +6,6 @@ let mediaRecorder;
 let recordingTabId;
 let recordingId;
 let recordingStartedAt;
-let chunkIndex = 0;
 let pendingChunkWrites = [];
 let stopPromise;
 let partDurationSeconds = 30 * 60;
@@ -14,7 +13,10 @@ let currentPart = 0;
 let currentPartOffset = 0;
 let nextTimedPartOffset;
 let resolutionCheckInterval;
-let pendingResolutionOffset;
+let partCheckInterval;
+let recorderMimeType;
+let rolloverPromise;
+let finalizing = false;
 
 function chooseMimeType(mode) {
   const candidates = mode === 'video'
@@ -27,6 +29,49 @@ function chooseMimeType(mode) {
       : 'This browser does not support WebM audio recording.');
   }
   return mimeType;
+}
+
+function startPartRecorder() {
+  const part = currentPart;
+  const offset = currentPartOffset;
+  let partChunkIndex = 0;
+  mediaRecorder = new MediaRecorder(capturedStream, { mimeType: recorderMimeType });
+  mediaRecorder.addEventListener('dataavailable', (event) => {
+    if (event.data.size === 0) return;
+    const elapsedSeconds = (Date.now() - recordingStartedAt) / 1000;
+    const write = saveChunk({
+      recordingId,
+      part,
+      index: partChunkIndex,
+      blob: event.data,
+    }, offset, elapsedSeconds);
+    partChunkIndex += 1;
+    pendingChunkWrites.push(write);
+  });
+  mediaRecorder.start(5000);
+}
+
+function rolloverPart(offset) {
+  if (rolloverPromise || finalizing || mediaRecorder?.state !== 'recording') {
+    return rolloverPromise;
+  }
+  const previousRecorder = mediaRecorder;
+  rolloverPromise = new Promise((resolve, reject) => {
+    previousRecorder.addEventListener('stop', () => {
+      try {
+        currentPart += 1;
+        currentPartOffset = offset;
+        startPartRecorder();
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
+    }, { once: true });
+    previousRecorder.stop();
+  }).finally(() => {
+    rolloverPromise = undefined;
+  });
+  return rolloverPromise;
 }
 
 async function startRecording(streamId, tab, mode, rolloverMinutes) {
@@ -56,19 +101,18 @@ async function startRecording(streamId, tab, mode, rolloverMinutes) {
     audioContext.createMediaStreamSource(capturedStream).connect(audioContext.destination);
     await audioContext.resume();
 
-    const mimeType = chooseMimeType(mode);
-    mediaRecorder = new MediaRecorder(capturedStream, { mimeType });
+    recorderMimeType = chooseMimeType(mode);
     recordingId = crypto.randomUUID();
     recordingTabId = tab.id;
     recordingStartedAt = Date.now();
-    chunkIndex = 0;
     pendingChunkWrites = [];
     stopPromise = undefined;
+    rolloverPromise = undefined;
+    finalizing = false;
     partDurationSeconds = rolloverMinutes * 60;
     currentPart = 0;
     currentPartOffset = 0;
     nextTimedPartOffset = partDurationSeconds;
-    pendingResolutionOffset = undefined;
 
     await createRecording({
       id: recordingId,
@@ -80,31 +124,10 @@ async function startRecording(streamId, tab, mode, rolloverMinutes) {
       duration: 0,
     });
 
-    mediaRecorder.addEventListener('dataavailable', (event) => {
-      if (event.data.size === 0) return;
-      const elapsedSeconds = (Date.now() - recordingStartedAt) / 1000;
-      while (elapsedSeconds >= nextTimedPartOffset) {
-        currentPart += 1;
-        currentPartOffset = nextTimedPartOffset;
-        nextTimedPartOffset += partDurationSeconds;
-      }
-      if (pendingResolutionOffset !== undefined) {
-        currentPart += 1;
-        currentPartOffset = pendingResolutionOffset;
-        pendingResolutionOffset = undefined;
-      }
-      const write = saveChunk({
-        recordingId,
-        part: currentPart,
-        index: chunkIndex,
-        blob: event.data,
-      }, currentPartOffset, elapsedSeconds);
-      chunkIndex += 1;
-      pendingChunkWrites.push(write);
-    });
+    startPartRecorder();
     capturedStream.getTracks().forEach((track) => {
       track.addEventListener('ended', () => {
-        if (mediaRecorder?.state === 'recording') stopRecording().catch(() => {});
+        if (recordingId) stopRecording().catch(() => {});
       }, { once: true });
     });
     const videoTrack = capturedStream.getVideoTracks()[0];
@@ -115,14 +138,21 @@ async function startRecording(streamId, tab, mode, rolloverMinutes) {
         if (settings.width !== width || settings.height !== height) {
           width = settings.width;
           height = settings.height;
-          pendingResolutionOffset = (Date.now() - recordingStartedAt) / 1000;
-          mediaRecorder.requestData();
+          rolloverPart((Date.now() - recordingStartedAt) / 1000)?.catch(() => {});
         }
       }, 1000);
     }
-    mediaRecorder.start(5000);
+    partCheckInterval = setInterval(() => {
+      const elapsedSeconds = (Date.now() - recordingStartedAt) / 1000;
+      if (elapsedSeconds >= nextTimedPartOffset) {
+        const offset = nextTimedPartOffset;
+        nextTimedPartOffset += partDurationSeconds;
+        rolloverPart(offset)?.catch(() => {});
+      }
+    }, 1000);
   } catch (error) {
     clearInterval(resolutionCheckInterval);
+    clearInterval(partCheckInterval);
     capturedStream?.getTracks().forEach((track) => track.stop());
     if (audioContext && audioContext.state !== 'closed') await audioContext.close();
     capturedStream = undefined;
@@ -134,8 +164,10 @@ async function startRecording(streamId, tab, mode, rolloverMinutes) {
   }
 }
 
-function stopRecording() {
+async function stopRecording() {
   if (stopPromise) return stopPromise;
+
+  if (rolloverPromise) await rolloverPromise;
 
   stopPromise = new Promise((resolve, reject) => {
     if (!mediaRecorder || mediaRecorder.state !== 'recording') {
@@ -143,12 +175,14 @@ function stopRecording() {
       return;
     }
 
+    finalizing = true;
     mediaRecorder.addEventListener('stop', async () => {
       try {
         await Promise.all(pendingChunkWrites);
         const duration = (Date.now() - recordingStartedAt) / 1000;
         await finishRecording(recordingId, duration);
         clearInterval(resolutionCheckInterval);
+        clearInterval(partCheckInterval);
         capturedStream.getTracks().forEach((track) => track.stop());
         await audioContext.close();
         const completedId = recordingId;
@@ -184,7 +218,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (message.type === 'GET_RECORDING_STATUS') {
     sendResponse({
-      recording: mediaRecorder?.state === 'recording',
+      recording: Boolean(recordingId) && !finalizing,
       tabId: recordingTabId,
       startedAt: recordingStartedAt,
     });

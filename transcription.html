@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Transcription Queue</title></head>
+  <body>
+    <h1>Transcription Queue</h1>
+    <form id="queue-form" hidden>
+      <fieldset>
+        <legend>Language</legend>
+        <label><input type="radio" name="language" value="en" checked> English</label>
+        <label><input type="radio" name="language" value="multilingual"> Multilingual</label>
+      </fieldset>
+      <button type="submit">Add to transcription queue</button>
+    </form>
+    <p id="status">Loading queue…</p>
+    <div id="jobs"></div>
+    <script type="module" src="/src/pages/transcription.js"></script>
+  </body>
+</html>

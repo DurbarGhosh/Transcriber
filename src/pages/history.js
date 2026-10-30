@@ -23,6 +23,15 @@ async function renderRecording(recording) {
   const details = document.createElement('p');
   details.textContent = `${new Date(recording.date).toLocaleString()} — ${formatDuration(recording.duration)} — ${recording.mode}`;
   article.append(heading, details);
+  if (recording.status === 'complete') {
+    const transcribeButton = document.createElement('button');
+    transcribeButton.type = 'button';
+    transcribeButton.textContent = 'Transcribe';
+    transcribeButton.addEventListener('click', () => {
+      location.href = `transcription.html?recordingId=${encodeURIComponent(recording.id)}`;
+    });
+    article.append(transcribeButton);
+  }
 
   const parts = await getRecordingParts(recording.id);
   parts.sort((left, right) => left.part - right.part);

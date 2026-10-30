@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@huggingface/transformers": "^3.8.1",
-    "idb": "^8.0.4"
+    "@ricky0123/vad-web": "^0.0.31",
+    "idb": "^8.0.4",
+    "mediabunny": "^1.65.0"
   }
 }
