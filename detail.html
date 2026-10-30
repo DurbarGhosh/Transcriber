@@ -6,6 +6,18 @@
     <h1 id="title">Transcript</h1>
     <p id="status">Loading…</p>
     <div id="player"></div>
+    <section id="exports" hidden>
+      <h2>Export</h2>
+      <label><input id="txt-timestamps" type="checkbox"> Include paragraph timestamps in TXT</label>
+      <p>
+        <button type="button" data-export="txt">Download TXT</button>
+        <button type="button" data-export="json">Download JSON</button>
+        <button type="button" data-export="srt">Download SRT</button>
+        <button type="button" data-export="vtt">Download VTT</button>
+        <button type="button" data-export="csv">Download CSV</button>
+      </p>
+      <div id="recording-downloads"></div>
+    </section>
     <main id="transcript"></main>
     <script type="module" src="/src/pages/detail.js"></script>
   </body>
