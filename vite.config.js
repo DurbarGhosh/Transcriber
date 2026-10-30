@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'node:path';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
 
 const root = resolve(import.meta.dirname);
 
@@ -23,8 +24,23 @@ function bundledWasmRuntime() {
   };
 }
 
+function versionStamp() {
+  return {
+    name: 'version-stamp',
+    async closeBundle() {
+      const manifestPath = resolve(root, 'dist/manifest.json');
+      const contents = JSON.parse(await readFile(manifestPath, 'utf8'));
+      contents.version_name = execFileSync('git', ['rev-parse', '--short', 'HEAD'], {
+        cwd: root,
+        encoding: 'utf8',
+      }).trim();
+      await writeFile(manifestPath, `${JSON.stringify(contents, null, 2)}\n`);
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [bundledWasmRuntime()],
+  plugins: [bundledWasmRuntime(), versionStamp()],
   build: {
     outDir: 'dist',
     emptyOutDir: true,
@@ -33,6 +49,7 @@ export default defineConfig({
         popup: resolve(root, 'popup.html'),
         offscreen: resolve(root, 'offscreen.html'),
         spike: resolve(root, 'spike.html'),
+        history: resolve(root, 'history.html'),
         background: resolve(root, 'src/background/background.js'),
       },
       output: {

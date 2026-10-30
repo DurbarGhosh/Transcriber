@@ -1,11 +1,16 @@
+import { createRecording, finishRecording, saveChunk } from '../storage/database.js';
+
 let audioContext;
 let capturedStream;
 let mediaRecorder;
-let recordedChunks = [];
-let lastRecordingUrl;
 let recordingTabId;
+let recordingId;
+let recordingStartedAt;
+let chunkIndex = 0;
+let pendingChunkWrites = [];
+let stopPromise;
 
-async function startRecording(streamId, tabId) {
+async function startRecording(streamId, tab) {
   if (mediaRecorder?.state === 'recording') {
     throw new Error('A recording is already running.');
   }
@@ -26,43 +31,81 @@ async function startRecording(streamId, tabId) {
   audioContext.createMediaStreamSource(capturedStream).connect(audioContext.destination);
   await audioContext.resume();
 
-  recordedChunks = [];
   const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
     ? 'audio/webm;codecs=opus'
     : 'audio/webm';
   mediaRecorder = new MediaRecorder(capturedStream, { mimeType });
-  recordingTabId = tabId;
-  mediaRecorder.addEventListener('dataavailable', (event) => {
-    if (event.data.size > 0) recordedChunks.push(event.data);
+  recordingId = crypto.randomUUID();
+  recordingTabId = tab.id;
+  recordingStartedAt = Date.now();
+  chunkIndex = 0;
+  pendingChunkWrites = [];
+  stopPromise = undefined;
+
+  await createRecording({
+    id: recordingId,
+    title: tab.title || 'Untitled tab',
+    url: tab.url || '',
+    date: new Date(recordingStartedAt).toISOString(),
+    mode: 'audio',
+    status: 'recording',
+    duration: 0,
   });
-  mediaRecorder.start(1000);
+
+  mediaRecorder.addEventListener('dataavailable', (event) => {
+    if (event.data.size === 0) return;
+    const write = saveChunk({
+      recordingId,
+      part: 0,
+      index: chunkIndex,
+      blob: event.data,
+    });
+    chunkIndex += 1;
+    pendingChunkWrites.push(write);
+  });
+  capturedStream.getTracks().forEach((track) => {
+    track.addEventListener('ended', () => {
+      if (mediaRecorder?.state === 'recording') stopRecording().catch(() => {});
+    }, { once: true });
+  });
+  mediaRecorder.start(5000);
 }
 
 function stopRecording() {
-  return new Promise((resolve, reject) => {
+  if (stopPromise) return stopPromise;
+
+  stopPromise = new Promise((resolve, reject) => {
     if (!mediaRecorder || mediaRecorder.state !== 'recording') {
       reject(new Error('No recording is running.'));
       return;
     }
 
     mediaRecorder.addEventListener('stop', async () => {
-      if (lastRecordingUrl) URL.revokeObjectURL(lastRecordingUrl);
-      const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType });
-      lastRecordingUrl = URL.createObjectURL(blob);
-      capturedStream.getTracks().forEach((track) => track.stop());
-      await audioContext.close();
-      recordingTabId = undefined;
-      resolve({ ok: true, size: blob.size });
+      try {
+        await Promise.all(pendingChunkWrites);
+        const duration = (Date.now() - recordingStartedAt) / 1000;
+        await finishRecording(recordingId, duration);
+        capturedStream.getTracks().forEach((track) => track.stop());
+        await audioContext.close();
+        const completedId = recordingId;
+        recordingTabId = undefined;
+        recordingId = undefined;
+        recordingStartedAt = undefined;
+        resolve({ ok: true, recordingId: completedId, duration });
+      } catch (error) {
+        reject(error);
+      }
     }, { once: true });
     mediaRecorder.stop();
   });
+  return stopPromise;
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.target !== 'offscreen') return false;
 
   if (message.type === 'START_RECORDING') {
-    startRecording(message.streamId, message.tabId)
+    startRecording(message.streamId, message.tab)
       .then(() => sendResponse({ ok: true }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
@@ -75,15 +118,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
-  if (message.type === 'GET_LAST_RECORDING') {
-    sendResponse({ ok: Boolean(lastRecordingUrl), url: lastRecordingUrl });
-    return false;
-  }
-
   if (message.type === 'GET_RECORDING_STATUS') {
     sendResponse({
       recording: mediaRecorder?.state === 'recording',
       tabId: recordingTabId,
+      startedAt: recordingStartedAt,
     });
     return false;
   }

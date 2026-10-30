@@ -22,17 +22,20 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'START_RECORDING') {
     (async () => {
       await ensureOffscreenDocument();
+      const recorder = await chrome.runtime.sendMessage({
+        target: 'offscreen',
+        type: 'GET_RECORDING_STATUS',
+      });
+      if (recorder?.recording) {
+        sendResponse({
+          ok: false,
+          error: 'Another recording is already running. Stop it before starting a new one.',
+        });
+        return;
+      }
       const capturedTabs = await chrome.tabCapture.getCapturedTabs();
       const existingCapture = capturedTabs.find(({ tabId }) => tabId === message.tabId);
       if (existingCapture) {
-        const recorder = await chrome.runtime.sendMessage({
-          target: 'offscreen',
-          type: 'GET_RECORDING_STATUS',
-        });
-        if (recorder?.recording) {
-          sendResponse({ ok: true, alreadyRecording: true });
-          return;
-        }
         throw new Error('This tab is already being captured. Stop the existing capture or close and reopen the tab, then try again.');
       }
       const streamId = await chrome.tabCapture.getMediaStreamId({
@@ -42,8 +45,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         target: 'offscreen',
         type: 'START_RECORDING',
         streamId,
-        tabId: message.tabId,
+        tab: message.tab,
       });
+      if (result.ok) await chrome.action.setBadgeText({ text: 'REC' });
       sendResponse(result);
     })().catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
@@ -51,7 +55,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (message.type === 'STOP_RECORDING') {
     chrome.runtime.sendMessage({ target: 'offscreen', type: 'STOP_RECORDING' })
-      .then(sendResponse)
+      .then(async (result) => {
+        if (result.ok) await chrome.action.setBadgeText({ text: '' });
+        sendResponse(result);
+      })
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
   }
@@ -68,4 +75,19 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   return false;
+});
+
+chrome.tabs.onRemoved.addListener(async (tabId) => {
+  try {
+    const status = await chrome.runtime.sendMessage({
+      target: 'offscreen',
+      type: 'GET_RECORDING_STATUS',
+    });
+    if (status.recording && status.tabId === tabId) {
+      await chrome.runtime.sendMessage({ target: 'offscreen', type: 'STOP_RECORDING' });
+      await chrome.action.setBadgeText({ text: '' });
+    }
+  } catch {
+    // The offscreen document may already have closed after the captured tab ended.
+  }
 });
