@@ -150,7 +150,7 @@ async function loadDetail() {
     status.textContent = 'This transcript could not be found.';
     return;
   }
-  title.textContent = recording?.title || 'Transcript for a deleted recording';
+  title.textContent = recording?.title || transcript.recordingTitle || 'Transcript for a deleted recording';
   status.textContent = '';
   prepareExports(recording, transcript, chunks);
 

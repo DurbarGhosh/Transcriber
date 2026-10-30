@@ -192,6 +192,42 @@ async function renderRecording(recording) {
   container.append(article);
 }
 
+function renderTranscriptOnly(transcript) {
+  const article = document.createElement('article');
+  article.className = 'recording-card';
+  const heading = document.createElement('h2');
+  heading.textContent = transcript.recordingTitle || 'Transcript from a deleted recording';
+  const details = document.createElement('p');
+  details.className = 'meta';
+  const date = transcript.recordingDate || transcript.created;
+  details.textContent = `${date ? new Date(date).toLocaleString() : 'Date unavailable'} — transcript only`;
+  const actions = document.createElement('p');
+  actions.className = 'action-row';
+  const openTranscript = document.createElement('a');
+  openTranscript.href = `detail.html?recordingId=${encodeURIComponent(transcript.recordingId)}`;
+  openTranscript.textContent = 'Open transcript';
+  openTranscript.className = 'button-link secondary';
+  const deleteButton = document.createElement('button');
+  deleteButton.type = 'button';
+  deleteButton.textContent = 'Delete transcript';
+  deleteButton.className = 'danger';
+  deleteButton.addEventListener('click', async () => {
+    deleteButton.disabled = true;
+    try {
+      await deleteTranscript(transcript.recordingId);
+      transcripts = transcripts.filter((item) => item.recordingId !== transcript.recordingId);
+      jobsById.delete(transcript.recordingId);
+      article.remove();
+    } catch (error) {
+      status.textContent = `Could not delete the transcript: ${userMessage(error)}`;
+      deleteButton.disabled = false;
+    }
+  });
+  actions.append(openTranscript, deleteButton);
+  article.append(heading, details, actions);
+  container.append(article);
+}
+
 function runSearch() {
   const query = searchInput.value.trim().toLocaleLowerCase();
   searchResults.hidden = false;
@@ -212,7 +248,7 @@ function runSearch() {
     const result = document.createElement('p');
     const link = document.createElement('a');
     link.href = `detail.html?recordingId=${encodeURIComponent(transcript.recordingId)}`;
-    link.textContent = recording?.title || 'Transcript for a deleted recording';
+    link.textContent = recording?.title || transcript.recordingTitle || 'Transcript for a deleted recording';
     result.append(link);
     searchResultList.append(result);
   }
@@ -244,12 +280,15 @@ async function loadHistory() {
   transcripts = storedTranscripts;
   jobsById = new Map(jobs.map((job) => [job.recordingId, job]));
   const hasStatusMessage = status.textContent !== 'Loading recordings…';
-  if (recordings.length === 0 && !hasStatusMessage) {
+  if (recordings.length === 0 && transcripts.length === 0 && !hasStatusMessage) {
     status.textContent = 'No recordings yet.';
   } else if (!hasStatusMessage) {
     status.textContent = '';
   }
   for (const recording of recordings) await renderRecording(recording);
+  for (const transcript of transcripts) {
+    if (!recordingsById.has(transcript.recordingId)) renderTranscriptOnly(transcript);
+  }
   await refreshStorageMeter();
 }
 

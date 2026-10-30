@@ -14,6 +14,7 @@ import {
   replaceRecordingWithAudio,
   discardRecording,
   updateTranscriptionJob,
+  updateTranscriptMetadata,
 } from '../storage/database.js';
 
 const status = document.querySelector('#status');
@@ -138,7 +139,15 @@ function makeKeepForm(job, recording) {
     const keepChoice = new FormData(formElement).get('keep');
     try {
       if (keepChoice === 'audio') await keepAudioOnly(recording);
-      if (keepChoice === 'transcript') await discardRecording(recording.id);
+      if (keepChoice === 'transcript') {
+        await updateTranscriptMetadata(recording.id, {
+          recordingTitle: recording.title,
+          recordingDate: recording.date,
+          recordingDuration: recording.duration,
+          recordingMode: recording.mode,
+        });
+        await discardRecording(recording.id);
+      }
       await updateTranscriptionJob(job.recordingId, { keepChoice });
       status.textContent = 'Keep choice applied. The transcript is still available in history.';
       await renderJobs();

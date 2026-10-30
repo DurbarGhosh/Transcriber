@@ -179,6 +179,13 @@ export async function deleteTranscript(recordingId) {
   await transaction.done;
 }
 
+export async function updateTranscriptMetadata(recordingId, metadata) {
+  const database = await databasePromise;
+  const transcript = await database.get('transcripts', recordingId);
+  if (!transcript) throw new Error('The transcript could not be found in storage.');
+  await database.put('transcripts', { ...transcript, ...metadata });
+}
+
 export async function queueTranscription(recordingId, language) {
   const database = await databasePromise;
   const transaction = database.transaction(['jobs', 'transcripts'], 'readwrite');
