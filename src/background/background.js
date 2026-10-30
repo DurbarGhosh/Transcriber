@@ -1,5 +1,5 @@
 const OFFSCREEN_DOCUMENT = 'offscreen.html';
-import { interruptActiveRecordings } from '../storage/database.js';
+import { deleteExpiredRecordings, interruptActiveRecordings } from '../storage/database.js';
 
 async function ensureOffscreenDocument() {
   const offscreenUrl = chrome.runtime.getURL(OFFSCREEN_DOCUMENT);
@@ -109,6 +109,8 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
 
 async function handleExtensionStartup() {
   await interruptActiveRecordings();
+  const { autoDeleteDays } = await chrome.storage.local.get({ autoDeleteDays: 0 });
+  await deleteExpiredRecordings(Number(autoDeleteDays));
   await chrome.action.setBadgeText({ text: '' });
 }
 

@@ -1,4 +1,5 @@
 import {
+  deleteExpiredRecordings,
   deleteTranscript,
   discardRecording,
   getRecordingChunks,
@@ -15,10 +16,25 @@ const searchForm = document.querySelector('#search-form');
 const searchInput = document.querySelector('#search');
 const searchResults = document.querySelector('#search-results');
 const searchResultList = document.querySelector('#search-result-list');
+const storageMeter = document.querySelector('#storage-meter');
+const retentionForm = document.querySelector('#retention-form');
+const autoDeleteEnabled = document.querySelector('#auto-delete-enabled');
+const autoDeleteDays = document.querySelector('#auto-delete-days');
 const objectUrls = [];
 let recordingsById = new Map();
 let transcripts = [];
 let jobsById = new Map();
+
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes)) return 'unknown';
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
+  return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+}
+
+async function refreshStorageMeter() {
+  const { usage, quota } = await navigator.storage.estimate();
+  storageMeter.textContent = `${formatBytes(usage)} used out of ${formatBytes(quota)} available to this browser profile.`;
+}
 
 function formatDuration(duration) {
   const seconds = Math.max(0, Math.round(duration));
@@ -118,6 +134,7 @@ async function renderRecording(recording) {
         await discardRecording(recording.id);
         article.remove();
         recordingsById.delete(recording.id);
+        await refreshStorageMeter();
       } catch (error) {
         interruptedMessage.textContent = `Could not discard the recording: ${error.message}`;
         discardButton.disabled = false;
@@ -136,6 +153,7 @@ async function renderRecording(recording) {
       await discardRecording(recording.id);
       article.remove();
       recordingsById.delete(recording.id);
+      await refreshStorageMeter();
     } catch (error) {
       status.textContent = `Could not delete the recording: ${error.message}`;
       deleteRecordingButton.disabled = false;
@@ -202,6 +220,14 @@ async function loadHistory() {
     await chrome.storage.local.set({ rolloverMinutes: 30 });
     status.textContent = 'Rollover setting reset to 30 minutes.';
   }
+  const { autoDeleteDays: savedAutoDeleteDays } = await chrome.storage.local.get({ autoDeleteDays: 0 });
+  const retentionDays = Number(savedAutoDeleteDays);
+  autoDeleteEnabled.checked = retentionDays > 0;
+  autoDeleteDays.disabled = retentionDays <= 0;
+  if (retentionDays > 0) autoDeleteDays.value = String(retentionDays);
+  const deletedCount = await deleteExpiredRecordings(retentionDays);
+  if (deletedCount > 0) status.textContent = `Automatically deleted ${deletedCount} old recording${deletedCount === 1 ? '' : 's'}. Transcripts were kept.`;
+
   const [recordings, storedTranscripts, jobs] = await Promise.all([
     listRecordings(),
     listTranscripts(),
@@ -210,18 +236,33 @@ async function loadHistory() {
   recordingsById = new Map(recordings.map((recording) => [recording.id, recording]));
   transcripts = storedTranscripts;
   jobsById = new Map(jobs.map((job) => [job.recordingId, job]));
-  if (recordings.length === 0 && !status.textContent.includes('setting')) {
+  const hasStatusMessage = status.textContent !== 'Loading recordings…';
+  if (recordings.length === 0 && !hasStatusMessage) {
     status.textContent = 'No recordings yet.';
-  } else if (!status.textContent.includes('setting')) {
+  } else if (!hasStatusMessage) {
     status.textContent = '';
   }
   for (const recording of recordings) await renderRecording(recording);
+  await refreshStorageMeter();
 }
 
 window.addEventListener('pagehide', () => objectUrls.forEach((url) => URL.revokeObjectURL(url)));
 searchForm.addEventListener('submit', (event) => {
   event.preventDefault();
   runSearch();
+});
+autoDeleteEnabled.addEventListener('change', () => {
+  autoDeleteDays.disabled = !autoDeleteEnabled.checked;
+});
+retentionForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const days = autoDeleteEnabled.checked ? Number(autoDeleteDays.value) : 0;
+  if (autoDeleteEnabled.checked && (!Number.isInteger(days) || days < 1)) {
+    status.textContent = 'Enter a whole number of days greater than zero.';
+    return;
+  }
+  await chrome.storage.local.set({ autoDeleteDays: days });
+  location.reload();
 });
 loadHistory().catch((error) => {
   status.textContent = `Could not load recording history: ${error.message}`;

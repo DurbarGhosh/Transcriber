@@ -8,6 +8,16 @@
   <body>
     <h1>Recording History</h1>
     <p><a href="transcription.html">Open transcription queue</a></p>
+    <section>
+      <h2>Storage</h2>
+      <p id="storage-meter">Checking storage…</p>
+      <form id="retention-form">
+        <label><input id="auto-delete-enabled" type="checkbox"> Automatically delete recordings after</label>
+        <input id="auto-delete-days" type="number" min="1" step="1" value="30"> days
+        <button type="submit">Save setting</button>
+      </form>
+      <p>Automatic deletion keeps transcripts.</p>
+    </section>
     <form id="search-form">
       <label>Search transcripts <input id="search" type="search"></label>
       <button type="submit">Search</button>

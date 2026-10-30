@@ -131,6 +131,37 @@ export async function discardRecording(id) {
   await transaction.done;
 }
 
+export async function replaceRecordingWithAudio(recordingId, audioParts) {
+  const database = await databasePromise;
+  const transaction = database.transaction(['recordings', 'chunks'], 'readwrite');
+  const recording = await transaction.objectStore('recordings').get(recordingId);
+  if (!recording) throw new Error('The recording could not be found in storage.');
+
+  const chunkIndex = transaction.objectStore('chunks').index('recordingId');
+  let cursor = await chunkIndex.openCursor(recordingId);
+  while (cursor) {
+    await cursor.delete();
+    cursor = await cursor.continue();
+  }
+  for (const { part, blob } of audioParts) {
+    await transaction.objectStore('chunks').put({ recordingId, part, index: 0, blob });
+  }
+  recording.mode = 'audio';
+  await transaction.objectStore('recordings').put(recording);
+  await transaction.done;
+}
+
+export async function deleteExpiredRecordings(days) {
+  if (!Number.isFinite(days) || days <= 0) return 0;
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+  const recordings = await listRecordings();
+  const expired = recordings.filter((recording) => (
+    recording.status !== 'recording' && new Date(recording.date).getTime() < cutoff
+  ));
+  for (const recording of expired) await discardRecording(recording.id);
+  return expired.length;
+}
+
 export async function deleteTranscript(recordingId) {
   const database = await databasePromise;
   const transaction = database.transaction(['transcripts', 'jobs'], 'readwrite');

@@ -1,4 +1,5 @@
 import { ALL_FORMATS, AudioBufferSink, BlobSource, Input } from 'mediabunny';
+import { extractAudioWebm } from '../media/extract-audio.js';
 import {
   appendTranscriptWords,
   claimNextJob,
@@ -8,6 +9,8 @@ import {
   listTranscriptionJobs,
   queueTranscription,
   resetRunningJobs,
+  replaceRecordingWithAudio,
+  discardRecording,
   updateTranscriptionJob,
 } from '../storage/database.js';
 
@@ -28,8 +31,10 @@ function formatTime(seconds) {
 async function renderJobs() {
   jobsContainer.replaceChildren();
   for (const job of await listTranscriptionJobs()) {
-    const row = document.createElement('p');
-    row.textContent = `${job.recordingId} — ${job.status} — ${formatTime(job.progressSeconds || 0)} / ${formatTime(job.totalSeconds || 0)}${job.error ? ` — ${job.error}` : ''}`;
+    const row = document.createElement('div');
+    const summary = document.createElement('p');
+    summary.textContent = `${job.recordingId} — ${job.status} — ${formatTime(job.progressSeconds || 0)} / ${formatTime(job.totalSeconds || 0)}${job.error ? ` — ${job.error}` : ''}`;
+    row.append(summary);
     if (job.status === 'running' || job.status === 'queued') {
       const cancel = document.createElement('button');
       cancel.type = 'button';
@@ -43,7 +48,7 @@ async function renderJobs() {
         }
         await renderJobs();
       });
-      row.append(' ', cancel);
+      summary.append(' ', cancel);
     }
     if (job.status === 'failed' || job.status === 'cancelled') {
       const retry = document.createElement('button');
@@ -54,10 +59,81 @@ async function renderJobs() {
         await renderJobs();
         startQueueRunner();
       });
-      row.append(' ', retry);
+      summary.append(' ', retry);
+    }
+    if (job.status === 'complete' && !job.keepChoice) {
+      const recording = await getRecording(job.recordingId);
+      if (recording) row.append(makeKeepForm(job, recording));
     }
     jobsContainer.append(row);
   }
+}
+
+async function keepAudioOnly(recording) {
+  if (recording.mode === 'audio') return;
+  const chunks = await getRecordingChunks(recording.id);
+  const partNumbers = [...new Set(chunks.map(({ part }) => part))].sort((left, right) => left - right);
+  if (!partNumbers.length) throw new Error('No saved video parts were found.');
+  const audioParts = [];
+  for (const part of partNumbers) {
+    status.textContent = `Extracting audio from part ${part + 1}…`;
+    const partChunks = chunks
+      .filter((chunk) => chunk.part === part)
+      .sort((left, right) => left.index - right.index);
+    const type = partChunks[0]?.blob.type || 'video/webm';
+    const videoBlob = new Blob(partChunks.map(({ blob }) => blob), { type });
+    audioParts.push({ part, blob: await extractAudioWebm(videoBlob) });
+  }
+  await replaceRecordingWithAudio(recording.id, audioParts);
+}
+
+function makeKeepForm(job, recording) {
+  const formElement = document.createElement('form');
+  const fieldset = document.createElement('fieldset');
+  const legend = document.createElement('legend');
+  legend.textContent = 'Transcription finished. What should be kept?';
+  fieldset.append(legend);
+  const choices = recording.mode === 'video'
+    ? [
+      ['video', 'Video + transcript'],
+      ['audio', 'Audio + transcript'],
+      ['transcript', 'Transcript only'],
+    ]
+    : [
+      ['audio', 'Audio + transcript'],
+      ['transcript', 'Transcript only'],
+    ];
+  for (const [value, labelText] of choices) {
+    const label = document.createElement('label');
+    const radio = document.createElement('input');
+    radio.type = 'radio';
+    radio.name = 'keep';
+    radio.value = value;
+    radio.required = true;
+    label.append(radio, ` ${labelText}`);
+    fieldset.append(label, ' ');
+  }
+  const applyButton = document.createElement('button');
+  applyButton.type = 'submit';
+  applyButton.textContent = 'Apply';
+  fieldset.append(applyButton);
+  formElement.append(fieldset);
+  formElement.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    applyButton.disabled = true;
+    const keepChoice = new FormData(formElement).get('keep');
+    try {
+      if (keepChoice === 'audio') await keepAudioOnly(recording);
+      if (keepChoice === 'transcript') await discardRecording(recording.id);
+      await updateTranscriptionJob(job.recordingId, { keepChoice });
+      status.textContent = 'Keep choice applied. The transcript is still available in history.';
+      await renderJobs();
+    } catch (error) {
+      status.textContent = `Could not apply the keep choice: ${error.message}`;
+      applyButton.disabled = false;
+    }
+  });
+  return formElement;
 }
 
 function resampleBuffers(buffers) {
