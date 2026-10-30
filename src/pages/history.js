@@ -9,6 +9,7 @@ import {
   listTranscripts,
   recoverRecording,
 } from '../storage/database.js';
+import { userMessage } from '../errors/user-message.js';
 
 const container = document.querySelector('#recordings');
 const status = document.querySelector('#status');
@@ -124,7 +125,7 @@ async function renderRecording(recording) {
         recoverButton.remove();
         discardButton.remove();
       } catch (error) {
-        interruptedMessage.textContent = `Could not recover the recording: ${error.message}`;
+        interruptedMessage.textContent = `Could not recover the recording: ${userMessage(error)}`;
         recoverButton.disabled = false;
       }
     });
@@ -136,7 +137,7 @@ async function renderRecording(recording) {
         recordingsById.delete(recording.id);
         await refreshStorageMeter();
       } catch (error) {
-        interruptedMessage.textContent = `Could not discard the recording: ${error.message}`;
+        interruptedMessage.textContent = `Could not discard the recording: ${userMessage(error)}`;
         discardButton.disabled = false;
       }
     });
@@ -155,7 +156,7 @@ async function renderRecording(recording) {
       recordingsById.delete(recording.id);
       await refreshStorageMeter();
     } catch (error) {
-      status.textContent = `Could not delete the recording: ${error.message}`;
+      status.textContent = `Could not delete the recording: ${userMessage(error)}`;
       deleteRecordingButton.disabled = false;
     }
   });
@@ -175,7 +176,7 @@ async function renderRecording(recording) {
         article.querySelector('a[href^="detail.html"]')?.remove();
         details.textContent = recordingDetails(recording);
       } catch (error) {
-        status.textContent = `Could not delete the transcript: ${error.message}`;
+        status.textContent = `Could not delete the transcript: ${userMessage(error)}`;
         deleteTranscriptButton.disabled = false;
       }
     });
@@ -261,9 +262,13 @@ retentionForm.addEventListener('submit', async (event) => {
     status.textContent = 'Enter a whole number of days greater than zero.';
     return;
   }
-  await chrome.storage.local.set({ autoDeleteDays: days });
-  location.reload();
+  try {
+    await chrome.storage.local.set({ autoDeleteDays: days });
+    location.reload();
+  } catch (error) {
+    status.textContent = `Could not save the setting: ${userMessage(error)}`;
+  }
 });
 loadHistory().catch((error) => {
-  status.textContent = `Could not load recording history: ${error.message}`;
+  status.textContent = `Could not load recording history: ${userMessage(error)}`;
 });

@@ -89,6 +89,15 @@ export async function getRecordingChunks(recordingId) {
   return database.getAllFromIndex('chunks', 'recordingId', recordingId);
 }
 
+export async function getRecordingPartChunks(recordingId, part) {
+  const database = await databasePromise;
+  const range = IDBKeyRange.bound(
+    [recordingId, part, 0],
+    [recordingId, part, Number.MAX_SAFE_INTEGER],
+  );
+  return database.getAll('chunks', range);
+}
+
 export async function getRecordingParts(recordingId) {
   const database = await databasePromise;
   return database.getAllFromIndex('parts', 'recordingId', recordingId);

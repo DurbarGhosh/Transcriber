@@ -1,10 +1,12 @@
 import { ALL_FORMATS, AudioBufferSink, BlobSource, Input } from 'mediabunny';
 import { extractAudioWebm } from '../media/extract-audio.js';
+import { userMessage } from '../errors/user-message.js';
 import {
   appendTranscriptWords,
   claimNextJob,
   getRecording,
   getRecordingChunks,
+  getRecordingPartChunks,
   getRecordingParts,
   listTranscriptionJobs,
   queueTranscription,
@@ -40,13 +42,17 @@ async function renderJobs() {
       cancel.type = 'button';
       cancel.textContent = 'Cancel';
       cancel.addEventListener('click', async () => {
-        await updateTranscriptionJob(job.recordingId, { status: 'cancelled' });
-        if (activeJob?.recordingId === job.recordingId) {
-          cancelled = true;
-          activeWorker?.terminate();
-          cancelActiveWindow?.();
+        try {
+          await updateTranscriptionJob(job.recordingId, { status: 'cancelled' });
+          if (activeJob?.recordingId === job.recordingId) {
+            cancelled = true;
+            activeWorker?.terminate();
+            cancelActiveWindow?.();
+          }
+          await renderJobs();
+        } catch (error) {
+          status.textContent = `Could not cancel transcription: ${userMessage(error)}`;
         }
-        await renderJobs();
       });
       summary.append(' ', cancel);
     }
@@ -55,9 +61,13 @@ async function renderJobs() {
       retry.type = 'button';
       retry.textContent = 'Retry';
       retry.addEventListener('click', async () => {
-        await updateTranscriptionJob(job.recordingId, { status: 'queued', error: '' });
-        await renderJobs();
-        startQueueRunner();
+        try {
+          await updateTranscriptionJob(job.recordingId, { status: 'queued', error: '' });
+          await renderJobs();
+          startQueueRunner();
+        } catch (error) {
+          status.textContent = `Could not retry transcription: ${userMessage(error)}`;
+        }
       });
       summary.append(' ', retry);
     }
@@ -129,7 +139,7 @@ function makeKeepForm(job, recording) {
       status.textContent = 'Keep choice applied. The transcript is still available in history.';
       await renderJobs();
     } catch (error) {
-      status.textContent = `Could not apply the keep choice: ${error.message}`;
+      status.textContent = `Could not apply the keep choice: ${userMessage(error)}`;
       applyButton.disabled = false;
     }
   });
@@ -203,7 +213,6 @@ async function processJob(job) {
   activeJob = job;
   cancelled = false;
   activeWorker = new Worker(new URL('../workers/job-worker.js', import.meta.url), { type: 'module' });
-  const chunks = await getRecordingChunks(job.recordingId);
   const parts = await getRecordingParts(job.recordingId);
   const recording = await getRecording(job.recordingId);
   parts.sort((a, b) => a.part - b.part);
@@ -214,36 +223,40 @@ async function processJob(job) {
 
   for (const part of parts) {
     if (cancelled) return;
-    const partChunks = chunks.filter((chunk) => chunk.part === part.part).sort((a, b) => a.index - b.index);
+    const partChunks = await getRecordingPartChunks(job.recordingId, part.part);
+    partChunks.sort((a, b) => a.index - b.index);
     if (!partChunks.length) continue;
     const blob = new Blob(partChunks.map(({ blob: chunkBlob }) => chunkBlob), { type: partChunks[0].blob.type });
     const input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS });
-    const track = await input.getPrimaryAudioTrack();
-    if (!track) throw new Error('No audio track was found in this recording part.');
-    const duration = await input.computeDuration();
-    const sink = new AudioBufferSink(track);
-    let windowStart = Math.max(0, (job.progressSeconds || 0) - part.offset);
-    while (windowStart < duration && !cancelled) {
-      const windowEnd = Math.min(duration, windowStart + 30);
-      const buffers = [];
-      for await (const wrapped of sink.buffers(windowStart, windowEnd)) buffers.push(wrapped);
-      const audio = resampleBuffers(buffers);
-      await runWorkerWindow(
-        activeWorker,
-        audio,
-        part.offset + windowStart,
-        part.offset + windowEnd,
-        job,
-      );
-      const progress = part.offset + windowEnd;
-      const elapsedSeconds = Math.max(1, (performance.now() - timingStartedAt) / 1000);
-      const processedSeconds = Math.max(1, progress - timingProgressStart);
-      const remainingSeconds = Math.max(0, totalSeconds - progress) * elapsedSeconds / processedSeconds;
-      status.textContent = `Processed ${formatTime(progress)}. Estimated time remaining: ${formatTime(remainingSeconds)}.`;
-      await renderJobs();
-      windowStart = windowEnd < duration ? Math.max(0, windowEnd - 1) : duration;
+    try {
+      const track = await input.getPrimaryAudioTrack();
+      if (!track) throw new Error('No audio track was found in this recording part. Protected video may have blocked its audio.');
+      const duration = await input.computeDuration();
+      const sink = new AudioBufferSink(track);
+      let windowStart = Math.max(0, (job.progressSeconds || 0) - part.offset);
+      while (windowStart < duration && !cancelled) {
+        const windowEnd = Math.min(duration, windowStart + 30);
+        const buffers = [];
+        for await (const wrapped of sink.buffers(windowStart, windowEnd)) buffers.push(wrapped);
+        const audio = resampleBuffers(buffers);
+        await runWorkerWindow(
+          activeWorker,
+          audio,
+          part.offset + windowStart,
+          part.offset + windowEnd,
+          job,
+        );
+        const progress = part.offset + windowEnd;
+        const elapsedSeconds = Math.max(1, (performance.now() - timingStartedAt) / 1000);
+        const processedSeconds = Math.max(1, progress - timingProgressStart);
+        const remainingSeconds = Math.max(0, totalSeconds - progress) * elapsedSeconds / processedSeconds;
+        status.textContent = `Processed ${formatTime(progress)}. Estimated time remaining: ${formatTime(remainingSeconds)}.`;
+        await renderJobs();
+        windowStart = windowEnd < duration ? Math.max(0, windowEnd - 1) : duration;
+      }
+    } finally {
+      input.dispose();
     }
-    input.dispose();
   }
   if (!cancelled) await updateTranscriptionJob(job.recordingId, { status: 'complete', error: '' });
   activeWorker.terminate();
@@ -264,8 +277,9 @@ async function runQueueLoop() {
     } catch (error) {
       activeWorker?.terminate();
       if (!cancelled) {
-        await updateTranscriptionJob(job.recordingId, { status: 'failed', error: error.message });
-        status.textContent = `Transcription failed: ${error.message}`;
+        const message = userMessage(error, 'Transcription failed. Click Retry to try again.');
+        await updateTranscriptionJob(job.recordingId, { status: 'failed', error: message });
+        status.textContent = `Transcription failed: ${message}`;
       }
     } finally {
       activeJob = undefined;
@@ -289,17 +303,28 @@ function startQueueRunner() {
     } finally {
       runnerActive = false;
     }
+  }).catch((error) => {
+    runnerActive = false;
+    status.textContent = `The transcription queue stopped: ${userMessage(error)}`;
   });
 }
 
 form.hidden = !recordingId;
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
-  const language = new FormData(form).get('language');
-  await queueTranscription(recordingId, language);
-  await renderJobs();
-  startQueueRunner();
+  try {
+    const language = new FormData(form).get('language');
+    await queueTranscription(recordingId, language);
+    await renderJobs();
+    startQueueRunner();
+  } catch (error) {
+    status.textContent = `Could not add this recording: ${userMessage(error)}`;
+  }
 });
 
-await renderJobs();
-startQueueRunner();
+try {
+  await renderJobs();
+  startQueueRunner();
+} catch (error) {
+  status.textContent = `Could not open the transcription queue: ${userMessage(error)}`;
+}

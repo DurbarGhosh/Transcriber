@@ -1,5 +1,6 @@
 import { env, pipeline } from '@huggingface/transformers';
 import { NonRealTimeVAD } from '@ricky0123/vad-web';
+import { modelErrorMessage } from '../errors/user-message.js';
 
 env.backends.onnx.wasm.wasmPaths = `${self.location.origin}/wasm/`;
 env.useBrowserCache = true;
@@ -25,6 +26,7 @@ async function load(language, hasWebGpu) {
     ? 'onnx-community/whisper-base.en_timestamped'
     : 'onnx-community/whisper-base_timestamped';
   let device = hasWebGpu ? 'webgpu' : 'wasm';
+  let fallbackMessage = hasWebGpu ? '' : 'WebGPU is unavailable. Using the slower WASM fallback.';
   const makePipeline = () => pipeline('automatic-speech-recognition', model, {
     device,
     progress_callback: (item) => {
@@ -33,13 +35,14 @@ async function load(language, hasWebGpu) {
       }
     },
   });
-  sendStatus(`Loading Whisper on ${device}…`);
+  sendStatus(fallbackMessage || `Loading Whisper on ${device}…`);
   try {
     transcriber = await makePipeline();
   } catch (error) {
     if (device !== 'webgpu') throw error;
     device = 'wasm';
-    sendStatus('WebGPU could not start. Falling back to WASM…');
+    fallbackMessage = 'WebGPU could not start. Using the slower WASM fallback.';
+    sendStatus(fallbackMessage);
     transcriber = await makePipeline();
   }
   loadedLanguage = language;
@@ -77,5 +80,5 @@ async function transcribeWindow(audio, windowStart, language, hasWebGpu) {
 self.addEventListener('message', (event) => {
   const { audio, windowStart, language, hasWebGpu } = event.data;
   transcribeWindow(audio, windowStart, language, hasWebGpu)
-    .catch((error) => self.postMessage({ type: 'ERROR', error: error.message }));
+    .catch((error) => self.postMessage({ type: 'ERROR', error: modelErrorMessage(error) }));
 });

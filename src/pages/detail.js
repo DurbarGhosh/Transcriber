@@ -3,6 +3,7 @@ import {
   getRecordingChunks,
   getTranscript,
 } from '../storage/database.js';
+import { userMessage } from '../errors/user-message.js';
 import {
   makeCsv,
   makeJson,
@@ -188,5 +189,5 @@ window.addEventListener('pagehide', () => {
 });
 
 loadDetail().catch((error) => {
-  status.textContent = `Could not open the transcript: ${error.message}`;
+  status.textContent = `Could not open the transcript: ${userMessage(error)}`;
 });

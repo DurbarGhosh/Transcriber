@@ -1,4 +1,5 @@
 import { createRecording, finishRecording, saveChunk } from '../storage/database.js';
+import { userMessage } from '../errors/user-message.js';
 
 let audioContext;
 let capturedStream;
@@ -17,6 +18,59 @@ let partCheckInterval;
 let recorderMimeType;
 let rolloverPromise;
 let finalizing = false;
+let captureWarning = '';
+let captureCheckTimer;
+let captureAudioCheckInterval;
+let previewVideo;
+
+function beginCaptureCheck(source, mode) {
+  captureWarning = '';
+  let audioSignalFound = false;
+  const analyser = audioContext.createAnalyser();
+  analyser.fftSize = 512;
+  source.connect(analyser);
+  const samples = new Uint8Array(analyser.fftSize);
+  captureAudioCheckInterval = setInterval(() => {
+    analyser.getByteTimeDomainData(samples);
+    if (samples.some((sample) => Math.abs(sample - 128) > 2)) audioSignalFound = true;
+  }, 500);
+
+  let pictureAppearsBlack = mode === 'video';
+  if (mode === 'video') {
+    previewVideo = document.createElement('video');
+    previewVideo.muted = true;
+    previewVideo.srcObject = capturedStream;
+    previewVideo.play().catch(() => {});
+  }
+
+  captureCheckTimer = setTimeout(() => {
+    clearInterval(captureAudioCheckInterval);
+    try {
+      if (previewVideo?.videoWidth && previewVideo?.videoHeight) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 32;
+        canvas.height = 18;
+        const context = canvas.getContext('2d', { willReadFrequently: true });
+        if (context) {
+          context.drawImage(previewVideo, 0, 0, canvas.width, canvas.height);
+          const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+          pictureAppearsBlack = true;
+          for (let index = 0; index < pixels.length; index += 4) {
+            if (pixels[index] > 8 || pixels[index + 1] > 8 || pixels[index + 2] > 8) {
+              pictureAppearsBlack = false;
+              break;
+            }
+          }
+        }
+      }
+    } catch {
+      pictureAppearsBlack = true;
+    }
+    if (!audioSignalFound || pictureAppearsBlack) {
+      captureWarning = 'The captured tab appears silent or black. Protected video may block recording. Stop and play back a short test before recording the full video.';
+    }
+  }, 8000);
+}
 
 function chooseMimeType(mode) {
   const candidates = mode === 'video'
@@ -44,7 +98,13 @@ function startPartRecorder() {
       part,
       index: partChunkIndex,
       blob: event.data,
-    }, offset, elapsedSeconds);
+    }, offset, elapsedSeconds).then(
+      () => ({ error: undefined }),
+      (error) => {
+        captureWarning = userMessage(error);
+        return { error };
+      },
+    );
     partChunkIndex += 1;
     pendingChunkWrites.push(write);
   });
@@ -98,8 +158,10 @@ async function startRecording(streamId, tab, mode, rolloverMinutes) {
     // Capturing a tab normally mutes it. Routing the captured stream back to the
     // speakers keeps playback audible without mixing microphone audio into it.
     audioContext = new AudioContext();
-    audioContext.createMediaStreamSource(capturedStream).connect(audioContext.destination);
+    const playbackSource = audioContext.createMediaStreamSource(capturedStream);
+    playbackSource.connect(audioContext.destination);
     await audioContext.resume();
+    beginCaptureCheck(playbackSource, mode);
 
     recorderMimeType = chooseMimeType(mode);
     recordingId = crypto.randomUUID();
@@ -153,7 +215,10 @@ async function startRecording(streamId, tab, mode, rolloverMinutes) {
   } catch (error) {
     clearInterval(resolutionCheckInterval);
     clearInterval(partCheckInterval);
+    clearTimeout(captureCheckTimer);
+    clearInterval(captureAudioCheckInterval);
     capturedStream?.getTracks().forEach((track) => track.stop());
+    if (previewVideo) previewVideo.srcObject = null;
     if (audioContext && audioContext.state !== 'closed') await audioContext.close();
     capturedStream = undefined;
     mediaRecorder = undefined;
@@ -178,18 +243,24 @@ async function stopRecording() {
     finalizing = true;
     mediaRecorder.addEventListener('stop', async () => {
       try {
-        await Promise.all(pendingChunkWrites);
+        const writes = await Promise.all(pendingChunkWrites);
+        const failedWrite = writes.find(({ error }) => error);
+        if (failedWrite) throw failedWrite.error;
         const duration = (Date.now() - recordingStartedAt) / 1000;
         await finishRecording(recordingId, duration);
         clearInterval(resolutionCheckInterval);
         clearInterval(partCheckInterval);
+        clearTimeout(captureCheckTimer);
+        clearInterval(captureAudioCheckInterval);
         capturedStream.getTracks().forEach((track) => track.stop());
+        if (previewVideo) previewVideo.srcObject = null;
         await audioContext.close();
         const completedId = recordingId;
+        const warning = captureWarning;
         recordingTabId = undefined;
         recordingId = undefined;
         recordingStartedAt = undefined;
-        resolve({ ok: true, recordingId: completedId, duration });
+        resolve({ ok: true, recordingId: completedId, duration, warning });
       } catch (error) {
         reject(error);
       }
@@ -205,14 +276,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'START_RECORDING') {
     startRecording(message.streamId, message.tab, message.mode, message.rolloverMinutes)
       .then(() => sendResponse({ ok: true }))
-      .catch((error) => sendResponse({ ok: false, error: error.message }));
+      .catch((error) => sendResponse({ ok: false, error: userMessage(error) }));
     return true;
   }
 
   if (message.type === 'STOP_RECORDING') {
     stopRecording()
       .then(sendResponse)
-      .catch((error) => sendResponse({ ok: false, error: error.message }));
+      .catch((error) => sendResponse({ ok: false, error: userMessage(error) }));
     return true;
   }
 
@@ -221,6 +292,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       recording: Boolean(recordingId) && !finalizing,
       tabId: recordingTabId,
       startedAt: recordingStartedAt,
+      warning: captureWarning,
     });
     return false;
   }

@@ -4,12 +4,14 @@ const stopButton = document.querySelector('#stop');
 const timer = document.querySelector('#timer');
 const modeInputs = [...document.querySelectorAll('input[name="mode"]')];
 let timerInterval;
+let statusInterval;
 
 function showRecordingState(recording, startedAt, orphanedCapture = false) {
   startButton.disabled = recording || orphanedCapture;
   stopButton.disabled = !recording;
   modeInputs.forEach((input) => { input.disabled = recording || orphanedCapture; });
   clearInterval(timerInterval);
+  clearInterval(statusInterval);
   if (!recording) {
     timer.textContent = '00:00';
     return;
@@ -21,6 +23,7 @@ function showRecordingState(recording, startedAt, orphanedCapture = false) {
   };
   updateTimer();
   timerInterval = setInterval(updateTimer, 1000);
+  statusInterval = setInterval(() => refreshStatus().catch(() => {}), 2000);
 }
 
 async function refreshStatus() {
@@ -31,9 +34,9 @@ async function refreshStatus() {
   });
   showRecordingState(result.recording, result.startedAt, result.orphanedCapture);
   if (result.recording) {
-    status.textContent = result.tabId === tab.id
+    status.textContent = result.warning || (result.tabId === tab.id
       ? 'This tab is recording.'
-      : 'Another tab is already recording. Stop it before starting a new recording.';
+      : 'Another tab is already recording. Stop it before starting a new recording.');
   } else if (result.orphanedCapture) {
     status.textContent = result.capturedTabId === tab.id
       ? 'Chrome still considers this tab captured, but the recorder lost control of it. Close and reopen this tab to release it.'
@@ -71,11 +74,15 @@ startButton.addEventListener('click', async (event) => {
 
 stopButton.addEventListener('click', async () => {
   status.textContent = 'Stopping…';
-  const result = await chrome.runtime.sendMessage({ target: 'background', type: 'STOP_RECORDING' });
-  status.textContent = result.ok
-    ? 'Recording stopped and saved. Open History to play it.'
-    : `Could not stop: ${result.error}`;
-  if (result.ok) showRecordingState(false);
+  try {
+    const result = await chrome.runtime.sendMessage({ target: 'background', type: 'STOP_RECORDING' });
+    status.textContent = result.ok
+      ? result.warning || 'Recording stopped and saved. Open History to play it.'
+      : `Could not stop: ${result.error}`;
+    if (result.ok) showRecordingState(false);
+  } catch (error) {
+    status.textContent = `Could not stop: ${error.message}`;
+  }
 });
 
 document.querySelector('#open-spike').addEventListener('click', () => {
