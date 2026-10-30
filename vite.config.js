@@ -32,6 +32,8 @@ function bundledVadRuntime() {
         ['node_modules/@ricky0123/vad-web/dist/silero_vad_legacy.onnx', 'vad/silero_vad_legacy.onnx'],
         ['node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.mjs', 'vad/ort-wasm-simd-threaded.mjs'],
         ['node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.wasm', 'vad/ort-wasm-simd-threaded.wasm'],
+        ['node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.mjs', 'vad/ort-wasm-simd-threaded.jsep.mjs'],
+        ['node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.wasm', 'vad/ort-wasm-simd-threaded.jsep.wasm'],
       ];
       for (const [sourcePath, fileName] of assets) {
         this.emitFile({
