@@ -34,13 +34,16 @@ async function renderJobs() {
   jobsContainer.replaceChildren();
   for (const job of await listTranscriptionJobs()) {
     const row = document.createElement('div');
+    row.className = 'job-card';
     const summary = document.createElement('p');
+    summary.className = 'meta';
     summary.textContent = `${job.recordingId} — ${job.status} — ${formatTime(job.progressSeconds || 0)} / ${formatTime(job.totalSeconds || 0)}${job.error ? ` — ${job.error}` : ''}`;
     row.append(summary);
     if (job.status === 'running' || job.status === 'queued') {
       const cancel = document.createElement('button');
       cancel.type = 'button';
       cancel.textContent = 'Cancel';
+      cancel.className = 'secondary';
       cancel.addEventListener('click', async () => {
         try {
           await updateTranscriptionJob(job.recordingId, { status: 'cancelled' });
@@ -60,6 +63,7 @@ async function renderJobs() {
       const retry = document.createElement('button');
       retry.type = 'button';
       retry.textContent = 'Retry';
+      retry.className = 'secondary';
       retry.addEventListener('click', async () => {
         try {
           await updateTranscriptionJob(job.recordingId, { status: 'queued', error: '' });

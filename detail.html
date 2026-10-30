@@ -1,15 +1,15 @@
 <!doctype html>
 <html lang="en">
-  <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Transcript Detail</title></head>
+  <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Transcript Detail</title><link rel="stylesheet" href="/src/styles.css"></head>
   <body>
-    <p><a href="history.html">Back to history</a></p>
-    <h1 id="title">Transcript</h1>
-    <p id="status">Loading…</p>
-    <div id="player"></div>
-    <section id="exports" hidden>
+    <div class="page-shell">
+    <header class="page-header"><div><p><a href="history.html">← Recording history</a></p><h1 id="title">Transcript</h1></div></header>
+    <p id="status" class="status-message" aria-live="polite">Loading…</p>
+    <div id="player" class="detail-player"></div>
+    <section id="exports" class="panel export-panel" hidden>
       <h2>Export</h2>
       <label><input id="txt-timestamps" type="checkbox"> Include paragraph timestamps in TXT</label>
-      <p>
+      <p class="button-group">
         <button type="button" data-export="txt">Download TXT</button>
         <button type="button" data-export="json">Download JSON</button>
         <button type="button" data-export="srt">Download SRT</button>
@@ -18,7 +18,8 @@
       </p>
       <div id="recording-downloads"></div>
     </section>
-    <main id="transcript"></main>
+    <main id="transcript" class="transcript"></main>
+    </div>
     <script type="module" src="/src/pages/detail.js"></script>
   </body>
 </html>

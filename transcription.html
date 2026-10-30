@@ -1,18 +1,20 @@
 <!doctype html>
 <html lang="en">
-  <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Transcription Queue</title></head>
+  <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Transcription Queue</title><link rel="stylesheet" href="/src/styles.css"></head>
   <body>
-    <h1>Transcription Queue</h1>
-    <form id="queue-form" hidden>
+    <div class="page-shell">
+    <header class="page-header"><div><h1>Transcription queue</h1><p>One recording runs at a time. Processing stays on this device.</p></div><a href="history.html">Recording history</a></header>
+    <form id="queue-form" class="panel" hidden>
       <fieldset>
         <legend>Language</legend>
         <label><input type="radio" name="language" value="en" checked> English</label>
         <label><input type="radio" name="language" value="multilingual"> Multilingual</label>
       </fieldset>
-      <button type="submit">Add to transcription queue</button>
+      <p><button type="submit">Add to transcription queue</button></p>
     </form>
-    <p id="status">Loading queue…</p>
-    <div id="jobs"></div>
+    <p id="status" class="status-message" aria-live="polite">Loading queue…</p>
+    <div id="jobs" class="job-list"></div>
+    </div>
     <script type="module" src="/src/pages/transcription.js"></script>
   </body>
 </html>

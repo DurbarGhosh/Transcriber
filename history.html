@@ -4,30 +4,34 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Recording History</title>
+    <link rel="stylesheet" href="/src/styles.css">
   </head>
   <body>
-    <h1>Recording History</h1>
-    <p><a href="transcription.html">Open transcription queue</a></p>
-    <section>
-      <h2>Storage</h2>
-      <p id="storage-meter">Checking storage…</p>
-      <form id="retention-form">
-        <label><input id="auto-delete-enabled" type="checkbox"> Automatically delete recordings after</label>
-        <input id="auto-delete-days" type="number" min="1" step="1" value="30"> days
-        <button type="submit">Save setting</button>
-      </form>
-      <p>Automatic deletion keeps transcripts.</p>
-    </section>
-    <form id="search-form">
-      <label>Search transcripts <input id="search" type="search"></label>
+    <div class="page-shell">
+    <header class="page-header"><div><h1>Recording history</h1><p>Recordings and transcripts stay on this device.</p></div><a class="button-link secondary" href="transcription.html">Transcription queue</a></header>
+    <div class="content-grid"><main>
+    <form id="search-form" class="inline-form panel">
+      <label class="field-label">Search transcripts <input id="search" type="search" placeholder="Search words or phrases"></label>
       <button type="submit">Search</button>
     </form>
-    <section id="search-results" hidden>
+    <section id="search-results" class="search-results" hidden>
       <h2>Search results</h2>
       <div id="search-result-list"></div>
     </section>
-    <p id="status">Loading recordings…</p>
-    <main id="recordings"></main>
+    <p id="status" class="status-message" aria-live="polite">Loading recordings…</p>
+    <div id="recordings" class="recording-list"></div>
+    </main><aside>
+    <section class="panel">
+      <h2>Storage</h2>
+      <p id="storage-meter" class="storage-meter">Checking storage…</p>
+      <form id="retention-form" class="stack">
+        <label><input id="auto-delete-enabled" type="checkbox"> Automatically delete old recordings</label>
+        <label class="field-label">Delete after <span><input id="auto-delete-days" type="number" min="1" step="1" value="30"> days</span></label>
+        <button type="submit">Save setting</button>
+      </form>
+      <p class="helper">Automatic deletion always keeps transcripts.</p>
+    </section>
+    </aside></div></div>
     <script type="module" src="/src/pages/history.js"></script>
   </body>
 </html>

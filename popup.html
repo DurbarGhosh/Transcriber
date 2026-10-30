@@ -4,20 +4,29 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tab Recorder</title>
+    <link rel="stylesheet" href="/src/styles.css">
   </head>
-  <body>
-    <h1>Tab Recorder</h1>
+  <body class="popup-body">
+    <main class="popup">
+    <header class="popup-header"><span class="popup-mark" aria-hidden="true"></span><h1>Tab Recorder</h1></header>
     <fieldset>
       <legend>Recording mode</legend>
+      <div class="choice-row">
       <label><input name="mode" type="radio" value="audio" checked> Audio only</label>
       <label><input name="mode" type="radio" value="video"> Video + audio</label>
+      </div>
     </fieldset>
+    <div class="popup-actions">
     <button id="start" type="button">Start recording this tab</button>
-    <button id="stop" type="button" disabled>Stop recording</button>
-    <p>Time: <span id="timer">00:00</span></p>
-    <p id="status">Ready.</p>
+    <button id="stop" class="secondary" type="button" disabled>Stop recording</button>
+    </div>
+    <p class="timer-row"><span class="muted">Elapsed</span><span id="timer">00:00</span></p>
+    <p id="status" class="status-message" aria-live="polite">Ready.</p>
+    <footer class="popup-footer">
     <button id="open-history" type="button">Open recording history</button>
     <button id="open-spike" type="button">Open transcription test</button>
+    </footer>
+    </main>
     <script type="module" src="/src/pages/popup.js"></script>
   </body>
 </html>

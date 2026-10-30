@@ -72,6 +72,7 @@ function addRecordingDownloads(recording, chunks, fileBase) {
   for (const group of groups) {
     const button = document.createElement('button');
     button.type = 'button';
+    button.className = 'secondary';
     button.textContent = `Download recording part ${group.part + 1}`;
     button.addEventListener('click', () => downloadPart(group));
     recordingDownloads.append(button, ' ');
@@ -79,6 +80,7 @@ function addRecordingDownloads(recording, chunks, fileBase) {
   if (groups.length > 1) {
     const allButton = document.createElement('button');
     allButton.type = 'button';
+    allButton.className = 'secondary';
     allButton.textContent = 'Download all recording parts';
     allButton.addEventListener('click', () => groups.forEach(downloadPart));
     recordingDownloads.append(allButton);
@@ -98,6 +100,7 @@ function prepareExports(recording, transcript, chunks) {
     csv: () => [makeCsv(transcript.words), 'text/csv;charset=utf-8'],
   };
   for (const button of exportsContainer.querySelectorAll('[data-export]')) {
+    button.classList.add('secondary');
     button.addEventListener('click', () => {
       const format = button.dataset.export;
       const [contents, type] = exporters[format]();
@@ -167,6 +170,7 @@ async function loadDetail() {
   for (const [index, word] of transcript.words.entries()) {
     const button = document.createElement('button');
     button.type = 'button';
+    button.className = 'transcript-word';
     button.textContent = word.word;
     button.title = `${word.start.toFixed(2)} seconds`;
     button.disabled = !player;

@@ -56,9 +56,11 @@ function recordingDetails(recording) {
 
 async function renderRecording(recording) {
   const article = document.createElement('article');
+  article.className = 'recording-card';
   const heading = document.createElement('h2');
   heading.textContent = recording.title;
   const details = document.createElement('p');
+  details.className = 'meta';
   details.textContent = recordingDetails(recording);
   article.append(heading, details);
 
@@ -77,6 +79,7 @@ async function renderRecording(recording) {
     const openTranscript = document.createElement('a');
     openTranscript.href = `detail.html?recordingId=${encodeURIComponent(recording.id)}`;
     openTranscript.textContent = 'Open transcript';
+    openTranscript.className = 'button-link secondary';
     article.append(' ', openTranscript);
   }
 
@@ -145,9 +148,11 @@ async function renderRecording(recording) {
   }
 
   const actions = document.createElement('p');
+  actions.className = 'action-row';
   const deleteRecordingButton = document.createElement('button');
   deleteRecordingButton.type = 'button';
   deleteRecordingButton.textContent = 'Delete recording';
+  deleteRecordingButton.className = 'danger';
   deleteRecordingButton.addEventListener('click', async () => {
     deleteRecordingButton.disabled = true;
     try {
@@ -166,6 +171,7 @@ async function renderRecording(recording) {
     const deleteTranscriptButton = document.createElement('button');
     deleteTranscriptButton.type = 'button';
     deleteTranscriptButton.textContent = 'Delete transcript';
+    deleteTranscriptButton.className = 'danger';
     deleteTranscriptButton.addEventListener('click', async () => {
       deleteTranscriptButton.disabled = true;
       try {
