@@ -4,8 +4,8 @@ const stopButton = document.querySelector('#stop');
 const timer = document.querySelector('#timer');
 let timerInterval;
 
-function showRecordingState(recording, startedAt) {
-  startButton.disabled = recording;
+function showRecordingState(recording, startedAt, orphanedCapture = false) {
+  startButton.disabled = recording || orphanedCapture;
   stopButton.disabled = !recording;
   clearInterval(timerInterval);
   if (!recording) {
@@ -27,11 +27,17 @@ async function refreshStatus() {
     target: 'background',
     type: 'GET_RECORDING_STATUS',
   });
-  showRecordingState(result.recording, result.startedAt);
+  showRecordingState(result.recording, result.startedAt, result.orphanedCapture);
   if (result.recording) {
     status.textContent = result.tabId === tab.id
       ? 'This tab is recording.'
       : 'Another tab is already recording. Stop it before starting a new recording.';
+  } else if (result.orphanedCapture) {
+    status.textContent = result.capturedTabId === tab.id
+      ? 'Chrome still considers this tab captured, but the recorder lost control of it. Close and reopen this tab to release it.'
+      : 'Chrome still considers another tab captured, but the recorder lost control of it. Close and reopen that tab to release it.';
+  } else if (result.error) {
+    status.textContent = `Could not check recording status: ${result.error}`;
   }
 }
 
