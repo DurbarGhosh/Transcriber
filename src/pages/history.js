@@ -55,55 +55,82 @@ function recordingDetails(recording) {
   return `${new Date(recording.date).toLocaleString()} — ${formatDuration(recording.duration)} — ${recording.mode} — ${displayStatus(recording.id)}`;
 }
 
-function makeRenameForm(recordingId, currentTitle, onSaved) {
+function makeEditableTitle(recordingId, currentTitle, headingLevel, onSaved) {
+  const containerElement = document.createElement('div');
+  containerElement.className = 'editable-title';
+  const display = document.createElement('div');
+  display.className = 'title-display';
+  const heading = document.createElement(headingLevel);
+  heading.textContent = currentTitle;
+  const editButton = document.createElement('button');
+  editButton.type = 'button';
+  editButton.className = 'icon-button edit-title-button';
+  editButton.textContent = '✎';
+  editButton.title = 'Edit title';
+  editButton.setAttribute('aria-label', 'Edit title');
+  display.append(heading, editButton);
   const form = document.createElement('form');
   form.className = 'inline-form rename-form';
-  const label = document.createElement('label');
-  label.className = 'field-label';
-  label.textContent = 'Title';
+  form.hidden = true;
   const input = document.createElement('input');
   input.type = 'text';
   input.value = currentTitle;
   input.maxLength = 200;
   input.required = true;
-  const button = document.createElement('button');
-  button.type = 'submit';
-  button.className = 'secondary';
-  button.textContent = 'Save title';
-  label.append(input);
-  form.append(label, button);
+  input.setAttribute('aria-label', 'Title');
+  const saveButton = document.createElement('button');
+  saveButton.type = 'submit';
+  saveButton.textContent = 'Save';
+  const cancelButton = document.createElement('button');
+  cancelButton.type = 'button';
+  cancelButton.className = 'secondary';
+  cancelButton.textContent = 'Cancel';
+  form.append(input, saveButton, cancelButton);
+  editButton.addEventListener('click', () => {
+    display.hidden = true;
+    form.hidden = false;
+    input.focus();
+    input.select();
+  });
+  cancelButton.addEventListener('click', () => {
+    input.value = heading.textContent;
+    form.hidden = true;
+    display.hidden = false;
+    editButton.focus();
+  });
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
-    button.disabled = true;
+    saveButton.disabled = true;
     try {
       const savedTitle = await renameTitle(recordingId, input.value);
       input.value = savedTitle;
+      heading.textContent = savedTitle;
       onSaved(savedTitle);
+      form.hidden = true;
+      display.hidden = false;
       status.textContent = 'Title saved.';
     } catch (error) {
       status.textContent = `Could not rename the title: ${userMessage(error)}`;
     } finally {
-      button.disabled = false;
+      saveButton.disabled = false;
     }
   });
-  return form;
+  containerElement.append(display, form);
+  return { containerElement, heading };
 }
 
 async function renderRecording(recording) {
   const article = document.createElement('article');
   article.className = 'recording-card';
-  const heading = document.createElement('h2');
-  heading.textContent = recording.title;
-  const details = document.createElement('p');
-  details.className = 'meta';
-  details.textContent = recordingDetails(recording);
-  const renameForm = makeRenameForm(recording.id, recording.title, (savedTitle) => {
+  const editableTitle = makeEditableTitle(recording.id, recording.title, 'h2', (savedTitle) => {
     recording.title = savedTitle;
-    heading.textContent = savedTitle;
     const transcript = transcripts.find((item) => item.recordingId === recording.id);
     if (transcript) transcript.recordingTitle = savedTitle;
   });
-  article.append(heading, details, renameForm);
+  const details = document.createElement('p');
+  details.className = 'meta';
+  details.textContent = recordingDetails(recording);
+  article.append(editableTitle.containerElement, details);
 
   if (recording.status === 'complete') {
     const transcribeButton = document.createElement('button');
@@ -236,20 +263,16 @@ async function renderRecording(recording) {
 function renderTranscriptOnly(transcript) {
   const article = document.createElement('article');
   article.className = 'recording-card';
-  const heading = document.createElement('h2');
-  heading.textContent = transcript.recordingTitle || 'Transcript from a deleted recording';
+  const editableTitle = makeEditableTitle(
+    transcript.recordingId,
+    transcript.recordingTitle || 'Transcript from a deleted recording',
+    'h2',
+    (savedTitle) => { transcript.recordingTitle = savedTitle; },
+  );
   const details = document.createElement('p');
   details.className = 'meta';
   const date = transcript.recordingDate || transcript.created;
   details.textContent = `${date ? new Date(date).toLocaleString() : 'Date unavailable'} — transcript only`;
-  const renameForm = makeRenameForm(
-    transcript.recordingId,
-    transcript.recordingTitle || 'Transcript from a deleted recording',
-    (savedTitle) => {
-      transcript.recordingTitle = savedTitle;
-      heading.textContent = savedTitle;
-    },
-  );
   const actions = document.createElement('p');
   actions.className = 'action-row';
   const openTranscript = document.createElement('a');
@@ -273,7 +296,7 @@ function renderTranscriptOnly(transcript) {
     }
   });
   actions.append(openTranscript, deleteButton);
-  article.append(heading, details, renameForm, actions);
+  article.append(editableTitle.containerElement, details, actions);
   container.append(article);
 }
 

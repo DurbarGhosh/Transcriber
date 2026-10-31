@@ -15,8 +15,11 @@ import {
 
 const recordingId = new URLSearchParams(location.search).get('recordingId');
 const title = document.querySelector('#title');
+const titleDisplay = document.querySelector('#title-display');
+const editTitleButton = document.querySelector('#edit-title');
 const renameForm = document.querySelector('#rename-form');
 const renameInput = document.querySelector('#rename-title');
+const cancelRenameButton = document.querySelector('#cancel-rename');
 const status = document.querySelector('#status');
 const playerContainer = document.querySelector('#player');
 const transcriptContainer = document.querySelector('#transcript');
@@ -155,7 +158,18 @@ async function loadDetail() {
   }
   title.textContent = recording?.title || transcript.recordingTitle || 'Transcript for a deleted recording';
   renameInput.value = title.textContent;
-  renameForm.hidden = false;
+  editTitleButton.addEventListener('click', () => {
+    titleDisplay.hidden = true;
+    renameForm.hidden = false;
+    renameInput.focus();
+    renameInput.select();
+  });
+  cancelRenameButton.addEventListener('click', () => {
+    renameInput.value = title.textContent;
+    renameForm.hidden = true;
+    titleDisplay.hidden = false;
+    editTitleButton.focus();
+  });
   renameForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     const button = renameForm.querySelector('button');

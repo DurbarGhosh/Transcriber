@@ -3,7 +3,7 @@
   <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Transcript Detail</title><link rel="stylesheet" href="/src/styles.css"></head>
   <body>
     <div class="page-shell">
-    <header class="page-header"><div><p><a href="history.html">← Recording history</a></p><h1 id="title">Transcript</h1><form id="rename-form" class="inline-form rename-form" hidden><label class="field-label">Title <input id="rename-title" type="text" maxlength="200" required></label><button type="submit" class="secondary">Save title</button></form></div></header>
+    <header class="page-header"><div><p><a href="history.html">← Recording history</a></p><div class="editable-title"><div id="title-display" class="title-display"><h1 id="title">Transcript</h1><button id="edit-title" type="button" class="icon-button edit-title-button" title="Edit title" aria-label="Edit title">✎</button></div><form id="rename-form" class="inline-form rename-form" hidden><input id="rename-title" type="text" maxlength="200" required aria-label="Title"><button type="submit">Save</button><button id="cancel-rename" type="button" class="secondary">Cancel</button></form></div></div></header>
     <p id="status" class="status-message" aria-live="polite">Loading…</p>
     <div id="player" class="detail-player"></div>
     <section id="exports" class="panel export-panel" hidden>
