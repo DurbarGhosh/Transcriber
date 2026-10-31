@@ -29,6 +29,9 @@ async function load(language, hasWebGpu) {
   let fallbackMessage = hasWebGpu ? '' : 'WebGPU is unavailable. Using the slower WASM fallback.';
   const makePipeline = () => pipeline('automatic-speech-recognition', model, {
     device,
+    // Match transformers.js defaults explicitly so Chrome does not report its
+    // informational dtype warning as an extension error.
+    dtype: device === 'wasm' ? 'q8' : 'fp32',
     progress_callback: (item) => {
       if (item.status === 'progress' && Number.isFinite(item.progress)) {
         sendStatus(`Downloading model: ${item.progress.toFixed(1)}%`);

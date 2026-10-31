@@ -9,6 +9,9 @@ async function makeTranscriber(device) {
   self.postMessage({ type: 'STATUS', text: `Loading Whisper base on ${device}. The first model download can take several minutes…` });
   return pipeline('automatic-speech-recognition', 'onnx-community/whisper-base_timestamped', {
     device,
+    // Match transformers.js defaults explicitly so Chrome does not report its
+    // informational dtype warning as an extension error.
+    dtype: device === 'wasm' ? 'q8' : 'fp32',
     progress_callback: (item) => {
       if (item.status === 'progress' && Number.isFinite(item.progress)) {
         self.postMessage({ type: 'STATUS', text: `Downloading model: ${item.progress.toFixed(1)}%` });
