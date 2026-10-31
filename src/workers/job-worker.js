@@ -48,12 +48,39 @@ async function load(language, hasWebGpu) {
   loadedLanguage = language;
 }
 
+function hasAudibleSignal(audio) {
+  const blockSize = 1600; // 100 ms at 16 kHz.
+  let audibleBlocks = 0;
+  for (let blockStart = 0; blockStart < audio.length; blockStart += blockSize) {
+    const blockEnd = Math.min(audio.length, blockStart + blockSize);
+    let squareSum = 0;
+    for (let index = blockStart; index < blockEnd; index += 1) {
+      squareSum += audio[index] * audio[index];
+    }
+    const rms = Math.sqrt(squareSum / Math.max(1, blockEnd - blockStart));
+    if (rms >= 0.002) audibleBlocks += 1;
+    // Require sustained sound so a click or codec artifact does not send a
+    // genuinely silent window to Whisper, where it could invent words.
+    if (audibleBlocks >= 5) return true;
+  }
+  return false;
+}
+
 async function transcribeWindow(audio, windowStart, language, hasWebGpu) {
   await load(language, hasWebGpu);
   let speechFound = false;
+  const speechSections = [];
   for await (const speech of vad.run(audio, 16000)) {
     speechFound = true;
-    const speechStart = windowStart + speech.start / 1000;
+    speechSections.push({ audio: speech.audio, start: speech.start / 1000 });
+  }
+  if (!speechFound && hasAudibleSignal(audio)) {
+    // Some media (especially quiet or processed voices after a pause) can be
+    // rejected by VAD even though the window is plainly audible.
+    speechSections.push({ audio, start: 0 });
+  }
+  for (const speech of speechSections) {
+    const speechStart = windowStart + speech.start;
     const maxSamples = 28 * 16000;
     const overlapSamples = 16000;
     for (let startSample = 0; startSample < speech.audio.length; startSample += maxSamples - overlapSamples) {
