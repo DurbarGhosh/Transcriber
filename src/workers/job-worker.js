@@ -48,37 +48,58 @@ async function load(language, hasWebGpu) {
   loadedLanguage = language;
 }
 
-function hasAudibleSignal(audio) {
+function findAudibleGaps(audio, coveredRanges) {
   const blockSize = 1600; // 100 ms at 16 kHz.
+  const gaps = [];
+  let gapStart;
+  let lastAudibleEnd;
   let audibleBlocks = 0;
+  const finishGap = () => {
+    if (gapStart !== undefined && audibleBlocks >= 5) gaps.push({ start: gapStart, end: lastAudibleEnd });
+    gapStart = undefined;
+    lastAudibleEnd = undefined;
+    audibleBlocks = 0;
+  };
   for (let blockStart = 0; blockStart < audio.length; blockStart += blockSize) {
     const blockEnd = Math.min(audio.length, blockStart + blockSize);
+    const blockStartSeconds = blockStart / 16000;
+    const blockEndSeconds = blockEnd / 16000;
+    const covered = coveredRanges.some(({ start, end }) => (
+      blockStartSeconds < end && blockEndSeconds > start
+    ));
     let squareSum = 0;
     for (let index = blockStart; index < blockEnd; index += 1) {
       squareSum += audio[index] * audio[index];
     }
     const rms = Math.sqrt(squareSum / Math.max(1, blockEnd - blockStart));
-    if (rms >= 0.002) audibleBlocks += 1;
-    // Require sustained sound so a click or codec artifact does not send a
-    // genuinely silent window to Whisper, where it could invent words.
-    if (audibleBlocks >= 5) return true;
+    if (!covered && rms >= 0.002) {
+      if (gapStart === undefined) gapStart = blockStart;
+      lastAudibleEnd = blockEnd;
+      audibleBlocks += 1;
+    } else if (covered || (lastAudibleEnd !== undefined && blockStart - lastAudibleEnd >= 2 * blockSize)) {
+      finishGap();
+    }
   }
-  return false;
+  finishGap();
+  return gaps.map(({ start, end }) => ({
+    // A little context helps Whisper recognize the first and last word while
+    // the timestamp-based duplicate check removes overlap with VAD sections.
+    audio: audio.slice(Math.max(0, start - 4000), Math.min(audio.length, end + 4000)),
+    start: Math.max(0, start - 4000) / 16000,
+  }));
 }
 
 async function transcribeWindow(audio, windowStart, language, hasWebGpu) {
   await load(language, hasWebGpu);
-  let speechFound = false;
   const speechSections = [];
+  const coveredRanges = [];
   for await (const speech of vad.run(audio, 16000)) {
-    speechFound = true;
     speechSections.push({ audio: speech.audio, start: speech.start / 1000 });
+    coveredRanges.push({ start: speech.start / 1000, end: speech.end / 1000 });
   }
-  if (!speechFound && hasAudibleSignal(audio)) {
-    // Some media (especially quiet or processed voices after a pause) can be
-    // rejected by VAD even though the window is plainly audible.
-    speechSections.push({ audio, start: 0 });
-  }
+  // VAD can recognize the first speech section but miss a later one after a
+  // pause. Check audible gaps even when some speech was already found.
+  speechSections.push(...findAudibleGaps(audio, coveredRanges));
   for (const speech of speechSections) {
     const speechStart = windowStart + speech.start;
     const maxSamples = 28 * 16000;
@@ -101,7 +122,7 @@ async function transcribeWindow(audio, windowStart, language, hasWebGpu) {
       if (endSample === speech.audio.length) break;
     }
   }
-  self.postMessage({ type: 'WINDOW_DONE', speechFound });
+  self.postMessage({ type: 'WINDOW_DONE', speechFound: speechSections.length > 0 });
 }
 
 self.addEventListener('message', (event) => {
