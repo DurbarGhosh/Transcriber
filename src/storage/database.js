@@ -79,6 +79,24 @@ export async function getTranscript(recordingId) {
   return database.get('transcripts', recordingId);
 }
 
+export async function renameTitle(recordingId, title) {
+  const nextTitle = title.trim();
+  if (!nextTitle) throw new Error('Enter a title before saving.');
+  const database = await databasePromise;
+  const transaction = database.transaction(['recordings', 'transcripts'], 'readwrite');
+  const recordingStore = transaction.objectStore('recordings');
+  const transcriptStore = transaction.objectStore('transcripts');
+  const [recording, transcript] = await Promise.all([
+    recordingStore.get(recordingId),
+    transcriptStore.get(recordingId),
+  ]);
+  if (!recording && !transcript) throw new Error('This recording or transcript could not be found.');
+  if (recording) await recordingStore.put({ ...recording, title: nextTitle });
+  if (transcript) await transcriptStore.put({ ...transcript, recordingTitle: nextTitle });
+  await transaction.done;
+  return nextTitle;
+}
+
 export async function listTranscripts() {
   const database = await databasePromise;
   return database.getAll('transcripts');

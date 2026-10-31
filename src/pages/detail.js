@@ -2,6 +2,7 @@ import {
   getRecording,
   getRecordingChunks,
   getTranscript,
+  renameTitle,
 } from '../storage/database.js';
 import { userMessage } from '../errors/user-message.js';
 import {
@@ -14,6 +15,8 @@ import {
 
 const recordingId = new URLSearchParams(location.search).get('recordingId');
 const title = document.querySelector('#title');
+const renameForm = document.querySelector('#rename-form');
+const renameInput = document.querySelector('#rename-title');
 const status = document.querySelector('#status');
 const playerContainer = document.querySelector('#player');
 const transcriptContainer = document.querySelector('#transcript');
@@ -151,6 +154,23 @@ async function loadDetail() {
     return;
   }
   title.textContent = recording?.title || transcript.recordingTitle || 'Transcript for a deleted recording';
+  renameInput.value = title.textContent;
+  renameForm.hidden = false;
+  renameForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const button = renameForm.querySelector('button');
+    button.disabled = true;
+    try {
+      const savedTitle = await renameTitle(recordingId, renameInput.value);
+      title.textContent = savedTitle;
+      renameInput.value = savedTitle;
+      status.textContent = 'Title saved. Reloading exports with the new filename…';
+      location.reload();
+    } catch (error) {
+      status.textContent = `Could not rename the title: ${userMessage(error)}`;
+      button.disabled = false;
+    }
+  });
   status.textContent = '';
   prepareExports(recording, transcript, chunks);
 

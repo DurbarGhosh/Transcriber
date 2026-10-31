@@ -7,6 +7,7 @@ import {
   listRecordings,
   listTranscriptionJobs,
   listTranscripts,
+  renameTitle,
   recoverRecording,
 } from '../storage/database.js';
 import { userMessage } from '../errors/user-message.js';
@@ -54,6 +55,40 @@ function recordingDetails(recording) {
   return `${new Date(recording.date).toLocaleString()} — ${formatDuration(recording.duration)} — ${recording.mode} — ${displayStatus(recording.id)}`;
 }
 
+function makeRenameForm(recordingId, currentTitle, onSaved) {
+  const form = document.createElement('form');
+  form.className = 'inline-form rename-form';
+  const label = document.createElement('label');
+  label.className = 'field-label';
+  label.textContent = 'Title';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = currentTitle;
+  input.maxLength = 200;
+  input.required = true;
+  const button = document.createElement('button');
+  button.type = 'submit';
+  button.className = 'secondary';
+  button.textContent = 'Save title';
+  label.append(input);
+  form.append(label, button);
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    button.disabled = true;
+    try {
+      const savedTitle = await renameTitle(recordingId, input.value);
+      input.value = savedTitle;
+      onSaved(savedTitle);
+      status.textContent = 'Title saved.';
+    } catch (error) {
+      status.textContent = `Could not rename the title: ${userMessage(error)}`;
+    } finally {
+      button.disabled = false;
+    }
+  });
+  return form;
+}
+
 async function renderRecording(recording) {
   const article = document.createElement('article');
   article.className = 'recording-card';
@@ -62,7 +97,13 @@ async function renderRecording(recording) {
   const details = document.createElement('p');
   details.className = 'meta';
   details.textContent = recordingDetails(recording);
-  article.append(heading, details);
+  const renameForm = makeRenameForm(recording.id, recording.title, (savedTitle) => {
+    recording.title = savedTitle;
+    heading.textContent = savedTitle;
+    const transcript = transcripts.find((item) => item.recordingId === recording.id);
+    if (transcript) transcript.recordingTitle = savedTitle;
+  });
+  article.append(heading, details, renameForm);
 
   if (recording.status === 'complete') {
     const transcribeButton = document.createElement('button');
@@ -201,6 +242,14 @@ function renderTranscriptOnly(transcript) {
   details.className = 'meta';
   const date = transcript.recordingDate || transcript.created;
   details.textContent = `${date ? new Date(date).toLocaleString() : 'Date unavailable'} — transcript only`;
+  const renameForm = makeRenameForm(
+    transcript.recordingId,
+    transcript.recordingTitle || 'Transcript from a deleted recording',
+    (savedTitle) => {
+      transcript.recordingTitle = savedTitle;
+      heading.textContent = savedTitle;
+    },
+  );
   const actions = document.createElement('p');
   actions.className = 'action-row';
   const openTranscript = document.createElement('a');
@@ -224,7 +273,7 @@ function renderTranscriptOnly(transcript) {
     }
   });
   actions.append(openTranscript, deleteButton);
-  article.append(heading, details, actions);
+  article.append(heading, details, renameForm, actions);
   container.append(article);
 }
 

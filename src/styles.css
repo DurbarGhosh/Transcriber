@@ -77,7 +77,7 @@ fieldset { margin: 0; border: 1px solid var(--line); border-radius: 8px; padding
 legend { padding: 0 6px; font-weight: 650; }
 label { cursor: pointer; }
 input[type="radio"], input[type="checkbox"] { accent-color: var(--accent); }
-input[type="search"], input[type="number"], select, input[type="file"] {
+input[type="search"], input[type="text"], input[type="number"], select, input[type="file"] {
   min-height: 38px;
   border: 1px solid #bdbdbd;
   border-radius: 6px;
@@ -86,6 +86,7 @@ input[type="search"], input[type="number"], select, input[type="file"] {
   color: var(--ink);
 }
 input[type="search"] { width: min(420px, 100%); }
+input[type="text"] { width: min(420px, 100%); }
 input[type="number"] { width: 82px; }
 
 .inline-form { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; }
@@ -97,6 +98,7 @@ input[type="number"] { width: 82px; }
 .recording-card audio, .recording-card video { display: block; width: min(100%, 680px); margin: 16px 0; }
 .recording-card video { max-height: 420px; background: #000000; }
 .recording-card .action-row { margin: 14px 0 0; }
+.rename-form { margin: 12px 0 16px; }
 
 .storage-meter { font-size: 14px; font-variant-numeric: tabular-nums; }
 .search-results { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line); }
