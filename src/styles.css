@@ -8,7 +8,7 @@
   --muted: #666666;
   --line: #dedede;
   --soft: #f6f6f4;
-  --accent: #2457d6;
+  --accent: #7c3aed;
   --danger: #b42318;
 }
 
@@ -17,7 +17,7 @@
 body {
   margin: 0;
   min-width: 320px;
-  background: #ffffff;
+  background: #faf8ff;
   color: var(--ink);
   font-size: 15px;
 }
