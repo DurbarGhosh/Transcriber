@@ -27,7 +27,7 @@ button, input, select { font: inherit; }
 button, .button-link {
   min-height: 38px;
   border: 1px solid var(--ink);
-  border-radius: 6px;
+  border-radius: 999px;
   padding: 7px 13px;
   background: var(--ink);
   color: #ffffff;
