@@ -1,0 +1,7 @@
+[profile]
+share = true
+
+[share]
+remote = "git@github-byte:DurbarGhosh/Transcriber.git"
+level = "summary"
+refs = "hidden"
